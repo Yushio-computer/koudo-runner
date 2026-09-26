@@ -1214,17 +1214,14 @@ function mineBlast(ch, ci, o, v) {                                    // 地雷�
   for (let i = 0; i < 7; i++) emit(bx + rnd(-.6, .6), .5 + rnd(0, .8), bz + rnd(-.6, .6), rnd(-3, 3), rnd(2, 6), rnd(-3, 3), rnd(.3, .55), rnd(1.6, 2.6), 3.5, Math.random() < .5 ? 0xff7a1a : 0xffd070, true, 4);   // 爆発の閃光
   for (let i = 0; i < 6; i++) emit(bx + rnd(-.8, .8), .6, bz + rnd(-.8, .8), rnd(-4, 4), rnd(2, 7), rnd(-4, 4), rnd(.9, 1.6), rnd(.8, 1.4), 2.4, 0x303030, false, 2);                  // 煙
   for (let i = 0; i < 5; i++) spawnDebris('chip_block', bx + rnd(-.5, .5), .3, bz + rnd(-.5, .5), rnd(-9, 9), rnd(8, 15), rnd(-9, 9), 0);                                                 // 土くれ
-  sfxCrash(1); shake = 1.4; $('flash').style.opacity = .55; popup(c.airHint ? 'BOOM! 地雷!' : 'BOOM! 空中は W/S=前後  A/D=左右に傾く  Space=回転を止める', 'close'); c.airHint = true;
+  sfxCrash(1); shake = 1.4; $('flash').style.opacity = .55; popup('BOOM! 地雷!', 'close');
 }
 function airStep(c, dt) {                                             // 破壊ステージだけの上下の動き(地雷で吹き飛んだときだけ。ほかのコースには上下の物理はない)
   const wrap = x => Math.atan2(Math.sin(x), Math.cos(x));
   if (c.air) {
     c.airT += dt;
     c.hopV -= 20 * dt; c.hop += c.hopV * dt;                        // 自由落下(重力20m/s²)
-    // 空中の姿勢制御: W=鼻を下げる S=鼻を上げる A=左に傾ける D=右に傾ける Space=回転を止める(着地に向けて姿勢を整える)
-    const tp = (keys.up ? 1 : 0) - (keys.down ? 1 : 0), tr = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-    c.tumPV += tp * 7 * dt; c.tumRV += tr * 8 * dt;
-    const damp = keys.space ? Math.exp(-4.5 * dt) : Math.exp(-.12 * dt); c.tumPV *= damp; c.tumRV *= damp; c.yawSpin *= keys.space ? Math.exp(-2 * dt) : Math.exp(-.1 * dt);
+    const damp = Math.exp(-.12 * dt); c.tumPV *= damp; c.tumRV *= damp; c.yawSpin *= Math.exp(-.1 * dt);      // 空中は操作できない。回転はほぼそのまま(空気抵抗ぶんだけ少し減る)
     c.tumP += c.tumPV * dt; c.tumR += c.tumRV * dt;
     if (c.hop <= 0 && c.hopV < 0) landCar(c, wrap);
   } else {
@@ -1245,13 +1242,11 @@ function landCar(c, wrap) {                                           // 着地�
   if (good) {                                                       // 車輪から着地: サスがつぶれて小さく跳ね、勢いを保つ
     sfxCrash(clamp(vi / 26, .2, .6)); c.vx *= .985; c.vz *= .985; c.pitchV = (c.pitchV || 0) + vi * .006;
     if (vi > 9 && c.airBounce < 3) { c.hopV = vi * .2; c.tumPV *= .3; c.tumRV *= .3; c.yawSpin *= .4; return; }   // 小さくもう一度弾む
-    const pts0 = Math.round((c.airT * 40 + flips * 300 + (flips ? 100 : 60)) * Math.min(1 + Math.max(0, combo) * .1, 10)); score += pts0; combo++; comboT = 2.5;
-    popup((flips ? 'フリップ×' + flips + '! ' : '') + 'ナイスランディング! +' + pts0 + '(滞空' + c.airT.toFixed(1) + '秒)', 'close'); sfxPass();
     c.air = false; c.tumPV = c.tumRV = 0; c.yawSpin = 0; return;
   }
   sfxCrash(clamp(vi / 20, .3, 1)); c.vx *= rough ? .9 : .78; c.vz *= rough ? .9 : .78;   // 斜めに着地・横転: 大きく跳ねて回転を続け、速度を失う
-  if (c.airBounce < 3) { c.hopV = vi * (rough ? .32 : .28); c.tumPV *= .65; c.tumRV *= .65; if (Math.abs(c.tumPV) + Math.abs(c.tumRV) < 1.2) { c.tumPV += rnd(-1.5, 1.5); c.tumRV += rnd(-2, 2); } popup(rough ? 'ラフランディング!' : '横転!'); return; }
-  c.air = false; c.tumPV = c.tumRV = 0; c.yawSpin = 0; c.flipT = 1.4; popup('横転!  立て直し中…');   // 3回目の接地でとまる。傾きは少しずつ起き上がる
+  if (c.airBounce < 3) { c.hopV = vi * (rough ? .32 : .28); c.tumPV *= .65; c.tumRV *= .65; if (Math.abs(c.tumPV) + Math.abs(c.tumRV) < 1.2) { c.tumPV += rnd(-1.5, 1.5); c.tumRV += rnd(-2, 2); } return; }
+  c.air = false; c.tumPV = c.tumRV = 0; c.yawSpin = 0; c.flipT = 1.4;   // 3回目の接地でとまる。傾きは少しずつ起き上がる
 }
 
 /* =====================================================================
@@ -1367,7 +1362,7 @@ function restart() {
   $('ovOver').classList.remove('on');
   if (course === 'tsukuba') beginCountdown(); else state = 'play';
 }
-const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して10m吹き飛ぶ。空中で W/S/A/D と Space で姿勢を整えて着地するとボーナス)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、北の高速の加速車線から本線へ合流する。歩行者や歩道はなし。右上のミニマップで信号・目標を確認(T でワープ)。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
+const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して10m吹き飛ぶ)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、北の高速の加速車線から本線へ合流する。歩行者や歩道はなし。右上のミニマップで信号・目標を確認(T でワープ)。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
 function refreshCourseUI() {
   document.querySelectorAll('[data-course]').forEach(b => b.classList.toggle('on', b.dataset.course === course));
   $('courseDesc').textContent = COURSE_DESC[course];

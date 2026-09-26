@@ -71,7 +71,7 @@
   <div id="count"></div>
   <div id="corner"></div>
   <div id="dead"></div>
-  <div id="tl"><div>SCORE <b id="score">0</b></div><div id="combo"></div><div id="lap"></div><div id="stp"></div></div>
+  <div id="tl"><div>SCORE <b id="score">0</b></div><div id="tod" style="font-size:12px;opacity:.75"></div><div id="combo"></div><div id="lap"></div><div id="stp"></div></div>
   <div id="tr"><div>DIST <b id="dist">0.0</b> km</div><div class="bar"><i id="hp" style="width:100%"></i></div><div style="font-size:11px">車体</div></div>
   <div id="br"><span id="spd">0</span><small>km/h</small><div id="gear">D</div><div class="bar" style="width:200px;margin-left:auto"><i id="rpm"></i></div><div id="rpmLabel" style="font-size:11px">モーター出力</div><div id="hyInfo" style="font-size:12px;line-height:1.35;opacity:.95;max-width:340px;margin-left:auto;text-align:right"></div><div id="battWrap"><div class="bar" style="width:200px;margin-left:auto"><i id="batt"></i></div><div style="font-size:11px">バッテリー</div></div></div>
   <div id="bc"><div class="bar"><i id="nit" style="width:100%"></i></div>NITRO&nbsp;[Shift]<br><span style="opacity:.8">発動中は車を貫通・時間とすり抜けで回復</span></div>
@@ -145,7 +145,8 @@ addEventListener('resize', resize); resize();
 const SUN_DIR = new THREE.Vector3(0.55, 0.13, 0.83).normalize();
 const sunLight = new THREE.DirectionalLight(0xffb070, 2.4);
 scene.add(sunLight, sunLight.target);
-scene.add(new THREE.HemisphereLight(0x9db0e0, 0x4a3a2a, 1.1));
+const hemiLight = new THREE.HemisphereLight(0x9db0e0, 0x4a3a2a, 1.1);
+scene.add(hemiLight);
 
 /* ---------- テクスチャ(すべてcanvasで自前生成) ---------- */
 function canvasTex(w, h, draw, repeat = true) {
@@ -252,6 +253,80 @@ const mountains = (() => {
 })();
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x4d5a33 }));
 scene.add(ground);
+
+/* =====================================================================
+   現実の時間とリンクした空
+   ・パソコンの現在時刻から、太陽(と夜は月)の位置・空の色・霧・光の強さ・星を決める。夜は自車のヘッドライトが点く
+   ・6時に東から昇り、12時に南で最高、18時に西へ沈む(高さ最大60°)。5秒ごとに更新(負荷なし)
+   ・URLに ?time=21:30 と付けると、その時刻から進む(動作確認用)
+   ===================================================================== */
+const TOD = { offset: 0, last: -1e9, envAt: 0 };
+{ const q = new URLSearchParams(location.search).get('time'); if (q && /^\d{1,2}:\d{2}$/.test(q)) { const [h, m] = q.split(':').map(Number), d = new Date(); TOD.offset = (h + m / 60) - (d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600); } }
+const todHours = () => { const d = new Date(), h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600 + TOD.offset; return ((h % 24) + 24) % 24; };
+// 太陽の高さ(度)ごとの空の設定: [高さ, 地平線, 中間, 天頂, 太陽光の色, 太陽光の強さ, 半球光の空色, 半球光の地面色, 半球光の強さ, 山の色みづけ]
+const SKY_KEYS = [
+  [-18, 0x0d1424, 0x080d1c, 0x03050c, 0x6a7fb8, .0, 0x1c2748, 0x0b0d14, .55, 0x1c2440],
+  [-8,  0x3a2f4d, 0x1b2245, 0x0a1230, 0x8a7ab0, .0, 0x3a3a70, 0x1a1416, .65, 0x2c2c54],
+  [-2,  0xb06a5a, 0x5a5a8e, 0x1a2a5c, 0xff8a60, .7, 0x7a70a0, 0x3a2a2a, .85, 0xc8a0a8],
+  [3,   0xe9a173, 0x8a93c4, 0x1f3a75, 0xffb070, 2.4, 0x9db0e0, 0x4a3a2a, 1.1, 0xffffff],    // いまの夕焼け
+  [12,  0xf2c99a, 0x8fb0d8, 0x2f5fa8, 0xffd9a8, 2.8, 0xa8c0f0, 0x5a4a38, 1.15, 0xd8d8e8],
+  [30,  0xbcd6ee, 0x7fb0e6, 0x3a7bd5, 0xfff2dc, 3.0, 0xbcd0ff, 0x6a5a45, 1.2, 0xa8c4ea],
+  [60,  0xb4d4f4, 0x6fa8e8, 0x2f6fd0, 0xfff6e8, 3.2, 0xbcd0ff, 0x6a5a45, 1.2, 0xa0c0ea],
+];
+const todState = { hours: 0, alt: 0, night: 0, envI: .9, day: 0 };
+const _ca = new THREE.Color(), _cb = new THREE.Color();
+function skyLerp(alt, idx) {                                   // 高さ alt(度)での色(idx番目の列)
+  let i = 0; while (i < SKY_KEYS.length - 2 && alt > SKY_KEYS[i + 1][0]) i++;
+  const a = SKY_KEYS[i], b = SKY_KEYS[i + 1], t = clamp((alt - a[0]) / (b[0] - a[0]), 0, 1);
+  return _ca.setHex(a[idx]).lerp(_cb.setHex(b[idx]), t);
+}
+const skyNum = (alt, idx) => { let i = 0; while (i < SKY_KEYS.length - 2 && alt > SKY_KEYS[i + 1][0]) i++; const a = SKY_KEYS[i], b = SKY_KEYS[i + 1]; return a[idx] + (b[idx] - a[idx]) * clamp((alt - a[0]) / (b[0] - a[0]), 0, 1); };
+const stars = (() => {
+  const n = 600, pos = new Float32Array(n * 3), rng = mulberry32(2024);
+  for (let i = 0; i < n; i++) { const u = rng(), v = rng() * 2 * Math.PI, y = .03 + u * .97, r = Math.sqrt(1 - y * y); pos.set([r * Math.cos(v) * 2400, y * 2400, r * Math.sin(v) * 2400], i * 3); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false }));
+  m.renderOrder = -2; m.visible = false; scene.add(m); return m;
+})();
+const moon = makeGlow(0xdfe8ff, 210, .95), moonHalo = makeGlow(0x8fa4d8, 700, .35);
+moon.renderOrder = moonHalo.renderOrder = -2; moon.visible = moonHalo.visible = false; scene.add(moonHalo, moon);
+const MOON_DIR = new THREE.Vector3(0, 1, 0);
+const headlight = new THREE.SpotLight(0xfff0d0, 0, 120, .5, .7, 1.5);        // 夜だけ点く自車のヘッドライト
+scene.add(headlight, headlight.target);
+const carEnvMats = new Set();                                    // 車の素材(環境の映り込みを昼夜で変える)
+function updateSky(force) {
+  const nowMs = Date.now(); if (!force && nowMs - TOD.last < 5000) return; TOD.last = nowMs;
+  const h = todHours(), alt = 60 * Math.sin(2 * Math.PI * (h - 6) / 24), altR = alt * Math.PI / 180, az = 2 * Math.PI * (h - 12) / 24;
+  todState.hours = h; todState.alt = alt;
+  SUN_DIR.set(Math.cos(altR) * Math.sin(az), Math.sin(altR), Math.cos(altR) * Math.cos(az)).normalize();
+  MOON_DIR.set(-SUN_DIR.x, Math.abs(SUN_DIR.y) * .9 + .15, -SUN_DIR.z).normalize();                  // 月は太陽の反対側(夜は空の上のほう)
+  const night = clamp((-alt - 3) / 10, 0, 1); todState.night = night; todState.day = clamp((alt + 2) / 12, 0, 1);
+  // 空の色(頂点色を塗り直す)
+  const R = 2500, p = sky.geometry.attributes.position, col = sky.geometry.attributes.color.array;
+  const cH = skyLerp(alt, 1).clone(), cM = skyLerp(alt, 2).clone(), cT = skyLerp(alt, 3).clone(), c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i) / R;
+    if (y <= 0) c.copy(cH); else if (y < .22) c.copy(cH).lerp(cM, y / .22); else c.copy(cM).lerp(cT, clamp((y - .22) / .6, 0, 1));
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  sky.geometry.attributes.color.needsUpdate = true;
+  scene.fog.color.copy(cH); scene.fog.near = 90 - night * 40; scene.fog.far = 1000 - night * 250;
+  mountains.material.color.copy(skyLerp(alt, 9));
+  // 光
+  const sunI = skyNum(alt, 5), moonI = night * .45;
+  if (sunI >= moonI) { sunLight.color.copy(skyLerp(alt, 4)); sunLight.intensity = sunI; } else { sunLight.color.setHex(0x8fa4d8); sunLight.intensity = moonI; }
+  hemiLight.color.copy(skyLerp(alt, 6)); hemiLight.groundColor.copy(skyLerp(alt, 7)); hemiLight.intensity = skyNum(alt, 8);
+  // 太陽・月・星・ヘッドライト
+  const sunVis = alt > -4; sunCore.visible = sunHalo.visible = sunVis;
+  sunHalo.material.color.copy(skyLerp(alt, 4)); sunHalo.material.opacity = .75 * clamp((alt + 4) / 8, 0, 1) * (1 - clamp((alt - 25) / 30, 0, .6));
+  moon.visible = moonHalo.visible = night > .05; moon.material.opacity = .95 * night; moonHalo.material.opacity = .35 * night;
+  stars.visible = night > .02; stars.material.opacity = night;
+  headlight.intensity = 140 * clamp(night * 1.3 + (1 - todState.day) * .3, 0, 1);
+  todState.envI = .25 + .65 * todState.day; carEnvMats.forEach(m => { m.envMapIntensity = todState.envI; });
+  const el = document.getElementById('tod'); if (el) el.textContent = String(Math.floor(h)).padStart(2, '0') + ':' + String(Math.floor((h % 1) * 60)).padStart(2, '0') + (alt > -3 ? '  ☀' : '  ☾');
+  if (nowMs - TOD.envAt > 15 * 60000 && typeof refreshEnv === 'function' && envReady) { TOD.envAt = nowMs; refreshEnv(); }   // 映り込み用の空は15分ごとに作り直す
+}
+updateSky(true);
 
 /* =====================================================================
    道路の生成(無限に続くワインディング)
@@ -541,11 +616,16 @@ function pickType() {
 let PLAYER = null, carMesh = null, cockpit = null, VEH = null, vehicleId = '';   // 現在の自車(setVehicle で差し替わる)
 
 /* ---------- GLBモデルの読み込み(夕焼け空を環境マップにして金属ツヤを出す) ---------- */
-const envTex = (() => {
+var envTex = null, envReady = false;
+const pmrem = new THREE.PMREMGenerator(renderer);
+function refreshEnv() {                                        // いまの空(色・太陽の位置)から、車に映り込ませる環境を作る
   const es = new THREE.Scene(); es.add(new THREE.Mesh(sky.geometry, sky.material));
-  const sun = makeGlow(0xfff2d0, 500, 1); sun.position.copy(SUN_DIR).multiplyScalar(2000); es.add(sun);
-  return new THREE.PMREMGenerator(renderer).fromScene(es, 0, 1, 3000).texture;
-})();
+  if (todState.alt > -4) { const sun = makeGlow(0xfff2d0, 500, 1); sun.position.copy(SUN_DIR).multiplyScalar(2000); es.add(sun); }
+  const old = envTex; envTex = pmrem.fromScene(es, 0, 1, 3000).texture;
+  carEnvMats.forEach(m => { m.envMap = envTex; m.needsUpdate = true; });
+  if (old) old.dispose();
+}
+refreshEnv(); envReady = true; TOD.envAt = Date.now();
 // yaw: モデルの前方向を+Zに合わせる回転。読み込み後、中心を原点・底面を地面にして全長lengthに拡縮する
 function loadCarModel(url, yaw, length, onLoad) {
   new GLTFLoader().load(url, gltf => {
@@ -554,7 +634,7 @@ function loadCarModel(url, yaw, length, onLoad) {
     const bb = new THREE.Box3().setFromObject(holder), size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
     inner.position.set(-ctr.x, -bb.min.y, -ctr.z);
     const k = length / size.z; holder.scale.setScalar(k);
-    inner.traverse(o => { if (o.isMesh) { o.material.envMap = envTex; o.material.envMapIntensity = .9; o.material.needsUpdate = true; } });
+    inner.traverse(o => { if (o.isMesh) { o.material.envMap = envTex; o.material.envMapIntensity = todState.envI; o.material.needsUpdate = true; carEnvMats.add(o.material); } });
     holder.userData.w = size.x * k; holder.userData.h = size.y * k;
     onLoad(holder);
   }, undefined, err => console.warn('GLB load failed, using box car:', url, err));
@@ -1709,7 +1789,7 @@ function stepPlayer(dt) {
 
   // --- 道路との関係
   const loc = isCity() ? { s: 0, d: 0, h: c.h, y: 0, sl: 0 } : locate(c.x, c.z, c.s);
-  if (isCity()) { c.s = 0; c.d = 0; c.roadH = c.h; c.sl = 0; c.y = cityOnDeck(c.x, c.z) ? HW_H : 0; c.grass = false; scraping = false; railCool = Math.max(0, railCool - dt); cityStepPlayer(c, dt); } else {
+  if (isCity()) { c.s = 0; c.d = 0; c.roadH = c.h; c.sl = 0; c.y = cityLevel(c).y; c.grass = false; scraping = false; railCool = Math.max(0, railCool - dt); cityStepPlayer(c, dt); cityRampWalls(c); } else {
   const sJump = loc.s - c.s;
   c.s = loc.s; c.d = loc.d; c.roadH = loc.h; c.sl = loc.sl;
   if (course === 'tsukuba' && Math.abs(loc.d) < ROAD_HALF + 3 && c.s > c.prog) c.prog = c.s;   // 道の上にいるときだけ進みを認める(コース外でs が飛んでも順位は変わらない。ショートカットは道に戻った時点で加算)
@@ -1818,11 +1898,14 @@ function updateCamera(dt) {
   }
   // 背景は常にカメラに追従
   sky.position.copy(camera.position);
+  updateSky();
   sunCore.position.copy(camera.position).addScaledVector(SUN_DIR, 2000);
   sunHalo.position.copy(sunCore.position);
+  stars.position.copy(camera.position); moon.position.copy(camera.position).addScaledVector(MOON_DIR, 2000); moonHalo.position.copy(moon.position);
+  { const fx0 = Math.sin(c.h), fz0 = Math.cos(c.h); headlight.position.set(c.x + fx0 * 2.2, c.y + (c.hop || 0) + .9, c.z + fz0 * 2.2); headlight.target.position.set(c.x + fx0 * 40, c.y + (c.hop || 0) - .5, c.z + fz0 * 40); }
   mountains.position.set(camera.position.x, c.y + 60, camera.position.z);
   ground.position.set(camera.position.x, isCity() ? -.03 : course === 'tsukuba' ? GROUND_Y : c.y - 2.6, camera.position.z);
-  sunLight.position.set(c.x, c.y, c.z).addScaledVector(SUN_DIR, 120); sunLight.target.position.set(c.x, c.y, c.z);
+  { const L = sunLight.intensity > 0 && sunLight.color.getHex() !== 0x8fa4d8 ? SUN_DIR : MOON_DIR; sunLight.position.set(c.x, c.y, c.z).addScaledVector(L, 120); sunLight.target.position.set(c.x, c.y, c.z); }
 }
 
 /* =====================================================================
@@ -2039,12 +2122,48 @@ const CITY_IW = 14, CITY_LANE = 3.5, CITY_CYCLE = 24;
 const HW_H = 7;                                        // 高速道路(高架)の路面の高さ(m)
 const HW = { A: -140, B: -143.5, ACC: -147, X0: -60, X1: 330, ACC_END: 80 };      // 合流路: 本線2車線(A,B)+左側の加速車線(ACC)。加速車線は x=80 で行き止まり
 const LOT = { x0: 187, x1: 263, z0: 97, z1: 173, aisle: 135, slotW: 2.6, slotL: 5.2, n: 26 };   // 駐車場(1ブロックぶん)
-const cityOnDeck = (x, z) => x > HW.X0 - 3 && x < HW.X1 + 3 && z < HW.A + 3.2 && z > HW.ACC - 3.2;   // 高架の上か(路面は一定の高さ。地上からは上がれず、ワープ・Rで乗る)
+const cityOnDeck = (x, z) => x > HW.X0 - 3 && x < HW.X1 + 3 && z < HW.A + 3.2 && z > HW.ACC - 3.8;   // 高架の上か(路面は一定の高さ。地上からは上がれず、ワープ・Rで乗る)
+
+/* ---------- 高速への上りランプ: 街の西端(x=-60, 西向き車線)から、西→北→東へ回り込み、加速車線の入口(-60,-147)へ。約180mで7m上がる ---------- */
+const RAMP_W = 8, RAMP_R = 30, RAMP_UP = 160;                    // 幅(m)・カーブ半径(m)・この長さで高架の高さまで上がる
+const rampY = sd => HW_H * (t => t * t * (3 - 2 * t))(clamp(sd / RAMP_UP, 0, 1));
+const RAMP = (() => {
+  const pts = [], R = RAMP_R, z0 = CITY_LANE, dA = 2 / R * 180 / Math.PI;
+  const c1 = { x: -60, z: z0 - R };                                 // 1) 西へ走ってきて右(北)へ90°: 中心(-60, z0-R)
+  for (let a = 90; a < 180; a += dA) pts.push([c1.x + R * Math.cos(a * Math.PI / 180), c1.z + R * Math.sin(a * Math.PI / 180)]);
+  const xs = -60 - R, zB = HW.ACC + R;                              // 2) 北へ直進(x=-90)
+  for (let z = c1.z; z > zB; z -= 2) pts.push([xs, z]);
+  for (let a = 180; a <= 270 + 1e-6; a += dA) pts.push([-60 + R * Math.cos(a * Math.PI / 180), zB + R * Math.sin(a * Math.PI / 180)]);   // 3) 右(東)へ90°: 加速車線へ
+  for (let x = -60 + 2; x <= -40; x += 2) pts.push([x, HW.ACC]);                                                                             // 4) 加速車線に重なる直線(高架の上で合流する)
+  const S = [0]; for (let i = 1; i < pts.length; i++) S.push(S[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  return { pts, S, len: S[S.length - 1] };
+})();
+function rampProject(x, z) {                                       // 位置 → ランプの中心線上の最寄り点(距離 s・横の距離 dist・そこの高さ y)
+  const P = RAMP.pts; let bi = 0, bd = 1e18;
+  for (let i = 0; i < P.length; i++) { const dx = x - P[i][0], dz = z - P[i][1], d2 = dx * dx + dz * dz; if (d2 < bd) { bd = d2; bi = i; } }
+  return { i: bi, s: RAMP.S[bi], dist: Math.sqrt(bd), y: rampY(RAMP.S[bi]) };
+}
+function cityLevel(c) {                                            // 自車がいま「高架」「ランプ」「地上」のどこにいるか(と、その路面の高さ)
+  if (cityOnDeck(c.x, c.z)) return { y: HW_H, zone: 'deck' };
+  const r = rampProject(c.x, c.z);
+  if (r.s < 20 ? r.dist < RAMP_W / 2 + 3 : (r.dist < RAMP_W / 2 + .6 && Math.abs((c.y || 0) - r.y) < 1.6)) return { y: r.y, zone: 'ramp', r };   // 入口(20mまで)は広く受け入れ、その先は高さがつながっているときだけ
+  return { y: 0, zone: 'ground' };
+}
+function cityRampWalls(c) {                                        // ランプの両側の壁(入口の14mと、高架につながる出口は壁なし)。地上を走る車(高さがちがう)と、高架の上には効かない
+  if (cityOnDeck(c.x, c.z)) return;
+  const r = rampProject(c.x, c.z); if (r.s < 14 || r.s > RAMP.len - 2) return;
+  if (Math.abs((c.y || 0) - r.y) > 2.2) return;
+  const half = RAMP_W / 2 - .95 - .75 * clamp((r.s - (RAMP.len - 45)) / 30, 0, 1);            // 加速車線に入る手前で、壁がしだいに狭まる
+  if (r.dist <= half || r.dist > RAMP_W / 2 + 8) return;
+  const P = RAMP.pts[r.i], nx = (c.x - P[0]) / (r.dist || 1), nz = (c.z - P[1]) / (r.dist || 1), ex = r.dist - half;
+  c.x -= nx * ex; c.z -= nz * ex; const vo = c.vx * nx + c.vz * nz;
+  if (vo > 0) { c.vx -= nx * vo * 1.25; c.vz -= nz * vo * 1.25; if (vo > 3 && railCool <= 0) { railCool = .35; shake = Math.min(1.2, shake + vo / 25); sfxCrash(clamp(vo / 15, 0, 1)); } }
+}
 const CITY_START = { x: -25, z: 86.5, h: Math.PI / 2 };
 const CITY_WARPS = [
   { name: '市街地', x: -25, z: 86.5, h: Math.PI / 2 },
   { name: '駐車場', x: 225, z: 103, h: 0 },
-  { name: '合流路(加速車線)', x: -40, z: -147, h: Math.PI / 2 },
+  { name: '高速の入口(ランプ)', x: -42, z: 3.5, h: -Math.PI / 2 },      // 西へ向かう車線。ここからランプを上って高架の加速車線へ入る
 ];
 const PK_ROUNDS = [                                   // 駐車ミッションの条件(成功した回数で進む。dx: 中心からの許容ずれ m、ang: 枠との角度の許容 rad、mode: any/front(前向き)/back(バック))
   { dx: .5, ang: .12, mode: 'any', text: 'この枠に停める(向きは自由)' },
@@ -2077,10 +2196,12 @@ function wallBox(c) {                                     // サーキットは�
   if (course !== 'tsukuba' && !isCity()) return;
   if (!WALL_BOX) WALL_BOX = {
     tsukuba: { x0: Math.min(...lapX) - 110, x1: Math.max(...lapX) + 110, z0: Math.min(...lapZ) - 110, z1: Math.max(...lapZ) + 110 },
-    city: { x0: CITY_XS[0] - 30, x1: CITY_XS[5] + 30, z0: CITY_ZS[0] - 30, z1: CITY_ZS[4] + 30 },
-    deck: { x0: HW.X0 - .6, x1: HW.X1 + .6, z0: HW.ACC - 2.4, z1: HW.A + 2.8 },                        // 高速道路(高架)の上の壁: 地上の壁とは別
+    city: { x0: CITY_XS[0] - 22, x1: CITY_XS[5] + 30, z0: CITY_ZS[0] - 30, z1: CITY_ZS[4] + 30 },      // 西側は、ランプの下にもぐらないよう少し内側
+    ramp: { x0: -100, x1: -50, z0: -156, z1: 14 },
+    deck: { x0: HW.X0 - 4, x1: HW.X1 + .6, z0: HW.ACC - 2.7, z1: HW.A + 2.8 },                        // 高速道路(高架)の上の壁: 地上の壁とは別
   };
-  const b = course === 'tsukuba' ? WALL_BOX.tsukuba : cityOnDeck(c.x, c.z) ? WALL_BOX.deck : WALL_BOX.city; let hit = false;
+  const zone = course === 'tsukuba' ? '' : cityLevel(c).zone;
+  const b = course === 'tsukuba' ? WALL_BOX.tsukuba : zone === 'deck' ? WALL_BOX.deck : zone === 'ramp' ? WALL_BOX.ramp : WALL_BOX.city; let hit = false;
   if (c.x < b.x0) { c.x = b.x0; if (c.vx < 0) c.vx *= -.3; hit = true; } else if (c.x > b.x1) { c.x = b.x1; if (c.vx > 0) c.vx *= -.3; hit = true; }
   if (c.z < b.z0) { c.z = b.z0; if (c.vz < 0) c.vz *= -.3; hit = true; } else if (c.z > b.z1) { c.z = b.z1; if (c.vz > 0) c.vz *= -.3; hit = true; }
   if (hit) wallFeedback(c);
@@ -2204,7 +2325,7 @@ function cityBuild() {
   const lane = (x0, x1, z, dashed) => { if (dashed) for (let x = x0; x < x1; x += 9) quad(x + 2, z, 4.5, .25); else quad((x0 + x1) / 2, z, x1 - x0, .25); };
   const p0 = paint.length; lane(HW.X0, HW.X1, (HW.A + HW.B) / 2, true); lane(HW.X0, HW.ACC_END, (HW.B + HW.ACC) / 2, true); lane(HW.X0, HW.X1, HW.A + 1.85, false); lane(HW.X0, HW.ACC_END, HW.ACC - 1.85, false); lane(HW.ACC_END, HW.X1, HW.B - 1.85, false);
   const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.Float32BufferAttribute(paint.slice(p0), 3)); pg2.computeVertexNormals(); const paintHw = new THREE.Mesh(pg2, matPaint); paintHw.position.y = HW_H; g.add(paintHw);
-  const dz0 = HW.ACC - 2.2, dz1 = HW.A + 2.6, dW = dz1 - dz0, dCz = (dz0 + dz1) / 2, dL = HW.X1 - HW.X0 + 1;              // 高架の床(z: 加速車線の外側〜本線の外側)
+  const dz0 = HW.ACC - 3.6, dz1 = HW.A + 2.6, dW = dz1 - dz0, dCz = (dz0 + dz1) / 2, dL = HW.X1 - HW.X0 + 1;              // 高架の床(z: 加速車線の外側〜本線の外側)
   const slab = new THREE.Mesh(new THREE.BoxGeometry(dL, .9, dW), matSide); slab.position.set((HW.X0 + HW.X1) / 2, HW_H - .45, dCz); g.add(slab);
   const rail = (zc) => { const m = new THREE.Mesh(new THREE.BoxGeometry(dL, 1.15, .4), matSide); m.position.set((HW.X0 + HW.X1) / 2, HW_H + .58, zc); g.add(m); };
   rail(dz0 - .2); rail(dz1 + .2);                                                                                                // 両側の壁(車は出られない)
@@ -2214,10 +2335,31 @@ function cityBuild() {
   g.add(piers);
   const dz0w = dz0 - .4, dz1w = dz1 + .4;
   city.aabbs.push({ x0: HW.X0 - 1, x1: HW.X1 + 1, z0: dz0w - .2, z1: dz0w + .4, deck: true }, { x0: HW.X0 - 1, x1: HW.X1 + 1, z0: dz1w - .4, z1: dz1w + .2, deck: true },
-    { x0: HW.X0 - 1, x1: HW.X0 - .3, z0: dz0w, z1: dz1w, deck: true }, { x0: HW.X1 + .3, x1: HW.X1 + 1, z0: dz0w, z1: dz1w, deck: true });     // 壁の当たり判定(高架の上にいるときだけ)
+    { x0: HW.X0 - 1, x1: HW.X0 - .3, z0: HW.ACC + 1.9, z1: dz1w, deck: true }, { x0: HW.X1 + .3, x1: HW.X1 + 1, z0: dz0w, z1: dz1w, deck: true });     // 壁の当たり判定(高架の上にいるときだけ)
   const barrier = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 4.4), mat(0xcc3030)); barrier.position.set(HW.ACC_END + 1.5, HW_H + .5, HW.ACC); g.add(barrier);   // 加速車線の行き止まり
   city.aabbs.push({ x0: HW.ACC_END, x1: HW.ACC_END + 3, z0: HW.ACC - 2.2, z1: HW.ACC + 2.2, deck: true });
   for (let i = 0; i < 3; i++) { const post = new THREE.Mesh(new THREE.BoxGeometry(.3, 1.4, .3), mat(0xf0f0f0)); post.position.set(HW.ACC_END - 8 - i * 6, HW_H + .7, HW.ACC + 2.1); g.add(post); }
+  // --- 高速への上りランプ(路面・両側の壁・下の橋脚)
+  {
+    const P = RAMP.pts, n = P.length, pos = [], idx = [], wl = [], wr = [], wi = [];
+    const rampMat = matAsph.clone(), wallMat = matSide.clone(); rampMat.side = wallMat.side = THREE.DoubleSide;
+    for (let i = 0; i < n; i++) {
+      const a = P[Math.max(0, i - 1)], b = P[Math.min(n - 1, i + 1)]; let tx = b[0] - a[0], tz = b[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
+      const nx = -tz, nz = tx, y = rampY(RAMP.S[i]) + .03, hw = RAMP_W / 2;
+      pos.push(P[i][0] + nx * hw, y, P[i][1] + nz * hw, P[i][0] - nx * hw, y, P[i][1] - nz * hw);
+      if (i < n - 1) idx.push(2 * i, 2 * i + 2, 2 * i + 1, 2 * i + 1, 2 * i + 2, 2 * i + 3);
+      for (const [arr, sg] of [[wl, 1], [wr, -1]]) { const ex = P[i][0] + nx * hw * sg, ez = P[i][1] + nz * hw * sg; arr.push(ex, y - .8, ez, ex, y + 1.15, ez); }   // 壁: 下(床板の厚さ)〜上
+    }
+    const mk = (positions, index, material) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); g.setIndex(index); g.computeVertexNormals(); return new THREE.Mesh(g, material); };
+    g.add(mk(pos, idx, rampMat));
+    const wIdx = []; for (let i = 0; i < n - 1; i++) if (RAMP.S[i] > 12) wIdx.push(2 * i, 2 * i + 1, 2 * i + 2, 2 * i + 1, 2 * i + 3, 2 * i + 2);   // 入口の12mは壁なし
+    g.add(mk(wl, wIdx, wallMat), mk(wr, wIdx, wallMat));
+    const under = pos.slice(); for (let i = 1; i < under.length; i += 3) under[i] -= .8; g.add(mk(under, idx, wallMat));                                       // 床板の下面
+    const pl = []; for (let i = 0; i < n; i += 10) if (rampY(RAMP.S[i]) > 1.7) pl.push(i);
+    const piers = new THREE.InstancedMesh(new THREE.CylinderGeometry(.5, .65, 1, 10).translate(0, .5, 0), matSide, pl.length), Mq = new THREE.Matrix4();
+    pl.forEach((i, k) => piers.setMatrixAt(k, Mq.makeScale(1, rampY(RAMP.S[i]) - .8, 1).setPosition(P[i][0], 0, P[i][1])));
+    g.add(piers);
+  }
   // --- 信号(各交差点に4本): 支柱+3灯の箱。点灯は色つきの光でも示す
   const dark = { R: new THREE.MeshBasicMaterial({ color: 0x3a0f0f }), Y: new THREE.MeshBasicMaterial({ color: 0x3a330f }), G: new THREE.MeshBasicMaterial({ color: 0x0f3a1c }) };
   const lit = { R: new THREE.MeshBasicMaterial({ color: 0xff2a20 }), Y: new THREE.MeshBasicMaterial({ color: 0xffcc22 }), G: new THREE.MeshBasicMaterial({ color: 0x35ff78 }) };
@@ -2270,7 +2412,7 @@ function citySigUpdate() {
 /* ---------- ミニマップ(都市) ---------- */
 function cityBuildMini() {
   const MI = 200, cv = document.createElement('canvas'); cv.width = cv.height = MI; const g = cv.getContext('2d');
-  const x0 = -75, x1 = 345, z0 = -165, z1 = 255, sc = (MI - 12) / Math.max(x1 - x0, z1 - z0), ox = (MI - (x1 - x0) * sc) / 2 - x0 * sc, oz = (MI - (z1 - z0) * sc) / 2 - z0 * sc;
+  const x0 = -105, x1 = 345, z0 = -165, z1 = 255, sc = (MI - 12) / Math.max(x1 - x0, z1 - z0), ox = (MI - (x1 - x0) * sc) / 2 - x0 * sc, oz = (MI - (z1 - z0) * sc) / 2 - z0 * sc;
   g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, MI, MI);
   g.lineCap = 'butt'; g.strokeStyle = 'rgba(140,140,150,.95)'; g.lineWidth = Math.max(2, CITY_IW * sc);
   const line = (ax, az, bx, bz) => { g.beginPath(); g.moveTo(ax * sc + ox, az * sc + oz); g.lineTo(bx * sc + ox, bz * sc + oz); g.stroke(); };
@@ -2280,6 +2422,7 @@ function cityBuildMini() {
   g.fillStyle = '#fff'; g.font = 'bold 11px sans-serif'; g.textAlign = 'center'; g.fillText('P', (LOT.x0 + LOT.x1) / 2 * sc + ox, (LOT.z0 + LOT.z1) / 2 * sc + oz + 4);
   g.strokeStyle = 'rgba(200,170,60,.95)'; g.lineWidth = Math.max(3, 11 * sc); line(HW.X0, (HW.A + HW.ACC) / 2, HW.X1, (HW.A + HW.ACC) / 2);   // 合流路(黄)
   g.strokeStyle = '#fff'; g.lineWidth = 2; line(HW.X0, HW.ACC - 1, HW.ACC_END, HW.ACC - 1);
+  g.strokeStyle = 'rgba(200,170,60,.95)'; g.lineWidth = Math.max(3, RAMP_W * sc); g.lineJoin = 'round'; g.beginPath(); RAMP.pts.forEach((q, i) => { const X = q[0] * sc + ox, Z = q[1] * sc + oz; i ? g.lineTo(X, Z) : g.moveTo(X, Z); }); g.stroke();   // 上りランプ(黄)
   city.mini = { cv, sc, ox, oz };
 }
 function cityDrawMini() {
@@ -2398,7 +2541,8 @@ function cityStepTraffic(dt, active) {
 }
 
 /* ---------- 自車の判定(建物・信号柱・信号無視・駐車・合流) ---------- */
-function cityRecover(sp) {                              // 街: いちばん近い車線の上へ(向きも道路に合わせる)。高架の上なら高架の車線へ
+function cityRecover(sp) {                              // 街: いちばん近い車線の上へ(向きも道路に合わせる)。高架の上なら高架の車線へ、ランプの上ならランプの中心へ
+  { const lv = cityLevel(car); if (lv.zone === 'ramp') { const P = RAMP.pts, i = lv.r.i, a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)], h = Math.atan2(b[0] - a[0], b[1] - a[1]); cityPlaceCar({ x: P[i][0], z: P[i][1], h }); car.y = lv.r.y; car.vx = Math.sin(h) * sp; car.vz = Math.cos(h) * sp; car.prevVf = sp; return; } }
   if (cityOnDeck(car.x, car.z)) {
     let bz = HW.ACC; for (const z of [HW.ACC, HW.B, HW.A]) if (Math.abs(z - car.z) < Math.abs(bz - car.z)) bz = z;
     const xr = clamp(car.x, HW.X0 + 8, bz === HW.ACC ? HW.ACC_END - 8 : HW.X1 - 8);
@@ -2525,7 +2669,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
+window.G = { RAMP, cityLevel, rampProject, HW, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
 </script>
 </body>
 </html>

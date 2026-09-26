@@ -675,14 +675,14 @@ const VEHICLES = {
     phys: {
       ACC0: 11.6, VMAX: 88.3,               // VMAX 約318km/h。加速は下の表(発進から強烈に、高速でも「まだ伸びる」)。目標: 0→100 約2.9秒 / 0→200 約9.5秒
       ACC_TABLE: [[0, 12.2], [30, 11.2], [60, 9.5], [100, 7.4], [150, 4.5], [200, 3.2], [250, 2.3], [300, 1.1], [318, 0]],
-      DRAG: .0005, COAST: 1.2, BRAKE_MAX: 12.5, MU_LAT: 1.12,        // 横グリップ約1.1G、最大ブレーキ約1.3G
+      DRAG: .0005, COAST: 1.2, BRAKE_MAX: 12.5, MU_LAT: 1.28,        // 横グリップ約1.1G、最大ブレーキ約1.3G
       // BRAKE_FADE: 高速ほどブレーキの効きを落としたいときは、ここに [[km/h, 倍率], …] の表を書く(例: 320km/hから約10秒で止まる設定は履歴にある)。今は使わず、全速度で同じ効き
       WHEELBASE: 2.78, TRACK: 1.6, CG_H: .46, FRONT_STATIC: .54, MIN_TURN_R: 5.7,   // 公式: ホイールベース2,780mm・トレッド1,600mm・最小回転半径5.7m。重量1,720kg。重心高0.46m(セレナ0.68m)と前後配分54:46は推定
-      STEER_SF: [[0, 1], [30, 1], [100, .92], [200, .75], [300, .6]],   // 高速でも舵の効きを大きく落とさない
+      STEER_SF: [[0, 1], [30, 1], [100, .95], [200, .85], [300, .72]],   // 高速でも舵の効きをほとんど落とさない(高速でも曲がりやすい)
       UNDERSTEER: .22, ROLL_DEG_PER_G: .9, REAR_MIN: .35,
     },
     hnd: {                                  // セレナと逆: 入力をできるだけ直接、素早く車体へ伝える
-      steerRate: 1.5, steerDecay: 75, yawResp: 13, steerExp: .85, knee: 3.5, driveLat: .22, accelShift: .35, downforce: .0004, lowSpeedPush: .16, yawRearMargin: 1.08, tcb: .7, lowGrip: .88, trailBrake: .25, brakeLat: .6, limitRot: .3, rotDur: .35,
+      steerRate: 1.5, steerDecay: 75, yawResp: 13, steerExp: .85, knee: 3.5, driveLat: .22, accelShift: .35, downforce: .00095, lowSpeedPush: .16, yawRearMargin: 1.08, tcb: .7, lowGrip: .88, trailBrake: .25, brakeLat: .6, limitRot: .3, rotDur: .35,
       rollRate: 14, rollMax: 3, pitchGain: .0014, pitchFreq: 16, pitchZeta: .5, stopKick: .05,
       thrRamp: .05, thrRelease: .05, thrLinear: true, brakeRamp: .10, brakeRelease: .07, brakeExp: 1.0,
     },

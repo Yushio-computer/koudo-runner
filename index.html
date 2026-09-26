@@ -656,7 +656,7 @@ const VEHICLES = {
   serena: {
     name: '日産 セレナ e-POWER', ready: true,
     powertrain: { type: 'series', battery0: .65 },
-    phys: { ACC0: 4.35, VMAX: 52, ACC_TABLE: [[0, 4.35], [55, 4.28], [60, 3.92], [70, 3.33], [80, 2.86], [90, 2.48], [100, 2.16], [110, 1.88], [120, 1.64], [130, 1.42], [140, 1.21], [150, 1.02], [160, .84], [170, .66], [180, .49], [187, 0]], DRAG: .0008, COAST: 1.4, BRAKE_MAX: 9.0, MU_LAT: .82, WHEELBASE: 2.87, MIN_TURN_R: 5.7, TRACK: 1.48, CG_H: .68, FRONT_STATIC: .60, STEER_SF: STEER_SF_STD, UNDERSTEER: .45, ROLL_DEG_PER_G: 2.8, REAR_MIN: .30 },
+    phys: { ACC0: 4.35, VMAX: 52, ACC_TABLE: [[0, 4.35], [55, 4.28], [60, 3.92], [70, 3.33], [80, 2.86], [90, 2.48], [100, 2.16], [110, 1.88], [120, 1.64], [130, 1.42], [140, 1.21], [150, 1.02], [160, .84], [170, .66], [180, .49], [187, 0]], DRAG: .0008, COAST: 1.4, BRAKE_MAX: 9.0, MU_LAT: 1.0, WHEELBASE: 2.87, MIN_TURN_R: 5.7, TRACK: 1.48, CG_H: .68, FRONT_STATIC: .60, STEER_SF: STEER_SF_STD, UNDERSTEER: .45, ROLL_DEG_PER_G: 2.8, REAR_MIN: .30 },
     box: {                                  // GLBが読めるまで(またはmodelがnullのとき)使う箱の仮モデル
       color: 0xd8201c, w: 1.86, l: 4.4, h: .48, ch: .56, cl: 1.7, cz: -.25, wing: true, len: 4.4,
       hit: { off: 1.3, r: .95 }, cam: { dist: 6.3, h: 2.1, look: 1.2 }, eye: [-.4, 1.15, 0],
@@ -705,7 +705,7 @@ const VEHICLES = {
     },
     phys: {
       ACC0: 4.75, VMAX: 50.5, ACC_TABLE: [[0, 4.84], [30, 4.79], [40, 4.27], [50, 3.4], [60, 2.78], [70, 2.36], [80, 2.03], [90, 1.77], [100, 1.54], [110, 1.36], [120, 1.19], [130, 1.04], [140, .91], [150, .78], [160, .66], [170, .55], [178, .43], [181.5, 0]],
-      DRAG: .0009, COAST: 1.2, BRAKE_MAX: 9.0, MU_LAT: .84, WHEELBASE: 2.85, MIN_TURN_R: 5.5, TRACK: 1.51, CG_H: .66, FRONT_STATIC: .58, STEER_SF: STEER_SF_STD, UNDERSTEER: .40, ROLL_DEG_PER_G: 2.7, REAR_MIN: .30,
+      DRAG: .0009, COAST: 1.2, BRAKE_MAX: 9.0, MU_LAT: 1.0, WHEELBASE: 2.85, MIN_TURN_R: 5.5, TRACK: 1.51, CG_H: .66, FRONT_STATIC: .58, STEER_SF: STEER_SF_STD, UNDERSTEER: .40, ROLL_DEG_PER_G: 2.7, REAR_MIN: .30,
     },
     hnd: {                                  // ミニバンとしては軽快: セレナより舵の立ち上がりが速く、ロールは付くが早く落ち着く
       steerRate: 1.12, yawResp: 10.5, steerExp: .95, rollRate: 6.5, pitchFreq: 8.5, pitchZeta: .5, thrRamp: .09, thrRelease: .10, coastRamp: .4,
@@ -731,7 +731,7 @@ const VEHICLES = {
     },
     phys: {
       ACC0: 5.0, VMAX: 50.5, ACC_TABLE: [[0, 5.0], [30, 4.98], [45, 4.85], [50, 4.63], [60, 3.82], [70, 3.24], [80, 2.79], [90, 2.43], [100, 2.12], [110, 1.87], [120, 1.64], [130, 1.43], [140, 1.25], [150, 1.07], [160, .91], [170, .75], [178, .62], [181.5, 0]],
-      DRAG: .0009, COAST: 1.2, BRAKE_MAX: 9.0, MU_LAT: .80, WHEELBASE: 2.89, MIN_TURN_R: 5.7, TRACK: 1.52, CG_H: .66, FRONT_STATIC: .57, STEER_SF: STEER_SF_STD, UNDERSTEER: .42, ROLL_DEG_PER_G: 3.0, REAR_MIN: .30,
+      DRAG: .0009, COAST: 1.2, BRAKE_MAX: 9.0, MU_LAT: .96, WHEELBASE: 2.89, MIN_TURN_R: 5.7, TRACK: 1.52, CG_H: .66, FRONT_STATIC: .57, STEER_SF: STEER_SF_STD, UNDERSTEER: .42, ROLL_DEG_PER_G: 3.0, REAR_MIN: .30,
     },
     hnd: {                                  // 柔らかいが、だらしなくない: 舵は素直、ロール・ピッチは付くが1回で収まる(減衰を強く)
       steerRate: 1.05, yawResp: 10.2, steerExp: 1, rollRate: 5.2, pitchGain: .0040, pitchFreq: 7, pitchZeta: .62, thrRamp: .10, thrRelease: .10, thrLinear: true, coastRamp: .3,
@@ -1163,9 +1163,11 @@ function smashStep(dt) {
       if (!o.alive) continue;
       const dx0 = o.x - c.x, dz0 = o.z - c.z; if (dx0 * dx0 + dz0 * dz0 > near * near) continue;
       const ob = OBS[o.type]; let hit = false;
+      const offs = o.type === 'mine' ? [0] : [PLAYER.hit.off, 0, -PLAYER.hit.off];                 // 地雷は車体の真ん中(床の下)を通ったときに爆発する
+      if (o.type === 'mine') { const ah = (o.x - c.x) * Fx + (o.z - c.z) * Fz; if (ah > .6 || ah < -.5) { if (!(Math.abs(ah) < v * dt * 1.2 + .6)) continue; } }   // 車の中心の真下あたり(前0.6m〜後ろ0.5m)に来たら
       for (const k of [0, .5, 1]) {                                            // 1フレームで進んだ道のりも調べる(高速で素通りしない)
         const bx = c.x - c.vx * dt * (1 - k), bz = c.z - c.vz * dt * (1 - k);
-        for (const off of [PLAYER.hit.off, 0, -PLAYER.hit.off]) { const dx = bx + Fx * off - o.x, dz = bz + Fz * off - o.z, rr = R + ob.r; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
+        for (const off of offs) { const dx = bx + Fx * off - o.x, dz = bz + Fz * off - o.z, rr = R + ob.r; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
         if (hit) break;
       }
       if (hit) { if (o.type === 'mine') { if (!c.air) mineBlast(ch, ci, o, v); } else smashObstacle(ch, ci, o, v); }
@@ -1196,8 +1198,15 @@ function smashObstacle(ch, ci, o, v, blast) {                    // blast: 爆�
 function mineBlast(ch, ci, o, v) {                                    // 地雷を踏んだ: 爆発して車が真上に吹き飛ぶ。近くの障害物も巻き込んで吹き飛ぶ(連鎖)
   const c = car, bx = o.x, bz = o.z;
   smashObstacle(ch, ci, o, v, { x: bx, z: bz });
-  c.air = true; c.hop = .05; c.hopV = 20;                              // 打ち上げ速度20m/s → 重力20m/s²でちょうど10m c.tumPV = rnd(-3.5, 3.5); c.tumRV = rnd(-4.5, 4.5);
-  c.vx += rnd(-2, 2); c.vz += rnd(-2, 2);
+  // 打ち上げ: 爆風のエネルギーは一定(真上へ20m/s = 重力20m/s²でちょうど10m)。地雷が車の中心からどれだけずれていたかで、回転のしかたが決まる
+  const Fx = Math.sin(c.h), Fz = Math.cos(c.h), Lx = Math.cos(c.h), Lz = -Math.sin(c.h);
+  const ahead = ((bx - c.x) * Fx + (bz - c.z) * Fz) / 2.3, left = ((bx - c.x) * Lx + (bz - c.z) * Lz) / 1.0;      // 地雷が前(+)/左(+)にどれだけずれているか(車の半分の大きさで割る)
+  const pa = clamp(ahead, -1, 1), la = clamp(left, -1, 1);
+  c.air = true; c.hop = .05; c.hopV = 20; c.airT = 0; c.airBounce = 0;
+  c.tumPV = -pa * .8 + rnd(-.1, .1);                               // 前寄りで踏むと鼻が上がる(負が鼻上げ)、後ろ寄りなら鼻が下がる
+  c.tumRV = la * 1.0 + rnd(-.15, .15);                                // 左寄りで踏むと左側が持ち上がる(正)
+  c.yawSpin = rnd(-1.0, 1.0) + la * .6;                             // 車体の向きは空中でくるくる回る
+  const dx = c.x - bx, dz = c.z - bz, dd = Math.hypot(dx, dz) || 1; c.vx += dx / dd * 3.5 + rnd(-1, 1); c.vz += dz / dd * 3.5 + rnd(-1, 1);   // 爆心から少し押し出される
   for (const cci of [ci - 1, ci, ci + 1]) {
     const cch = chunks.get(cci); if (!cch || !cch.smash) continue;
     for (const q of cch.smash.items) if (q.alive && Math.hypot(q.x - bx, q.z - bz) < 7.5) smashObstacle(cch, cci, q, v, { x: bx, z: bz });
@@ -1205,18 +1214,44 @@ function mineBlast(ch, ci, o, v) {                                    // 地雷�
   for (let i = 0; i < 7; i++) emit(bx + rnd(-.6, .6), .5 + rnd(0, .8), bz + rnd(-.6, .6), rnd(-3, 3), rnd(2, 6), rnd(-3, 3), rnd(.3, .55), rnd(1.6, 2.6), 3.5, Math.random() < .5 ? 0xff7a1a : 0xffd070, true, 4);   // 爆発の閃光
   for (let i = 0; i < 6; i++) emit(bx + rnd(-.8, .8), .6, bz + rnd(-.8, .8), rnd(-4, 4), rnd(2, 7), rnd(-4, 4), rnd(.9, 1.6), rnd(.8, 1.4), 2.4, 0x303030, false, 2);                  // 煙
   for (let i = 0; i < 5; i++) spawnDebris('chip_block', bx + rnd(-.5, .5), .3, bz + rnd(-.5, .5), rnd(-9, 9), rnd(8, 15), rnd(-9, 9), 0);                                                 // 土くれ
-  sfxCrash(1); shake = 1.4; $('flash').style.opacity = .55; popup('BOOM! 地雷!', 'close');
+  sfxCrash(1); shake = 1.4; $('flash').style.opacity = .55; popup(c.airHint ? 'BOOM! 地雷!' : 'BOOM! 空中は W/S=前後  A/D=左右に傾く  Space=回転を止める', 'close'); c.airHint = true;
 }
 function airStep(c, dt) {                                             // 破壊ステージだけの上下の動き(地雷で吹き飛んだときだけ。ほかのコースには上下の物理はない)
+  const wrap = x => Math.atan2(Math.sin(x), Math.cos(x));
   if (c.air) {
-    c.hopV -= 20 * dt; c.hop += c.hopV * dt; c.tumP += c.tumPV * dt; c.tumR += c.tumRV * dt;
-    if (c.hop <= 0 && c.hopV < 0) {                                   // 着地
-      const vi = -c.hopV; c.hop = 0; c.hopV = 0; c.air = false;
-      c.tumP = Math.atan2(Math.sin(c.tumP), Math.cos(c.tumP)); c.tumR = Math.atan2(Math.sin(c.tumR), Math.cos(c.tumR));      // 回転は一番近い向きへ戻る
-      shake = Math.min(1.5, shake + vi / 18); sfxCrash(clamp(vi / 24, .25, .7)); c.vx *= .94; c.vz *= .94;
-      for (let i = 0; i < 8; i++) emit(c.x + rnd(-1, 1), c.y + .2, c.z + rnd(-1, 1), c.vx * .2 + rnd(-3, 3), rnd(.5, 3), c.vz * .2 + rnd(-3, 3), rnd(.5, .9), rnd(.6, 1), 1.6, 0x9a8c70, false, 3);
+    c.airT += dt;
+    c.hopV -= 20 * dt; c.hop += c.hopV * dt;                        // 自由落下(重力20m/s²)
+    // 空中の姿勢制御: W=鼻を下げる S=鼻を上げる A=左に傾ける D=右に傾ける Space=回転を止める(着地に向けて姿勢を整える)
+    const tp = (keys.up ? 1 : 0) - (keys.down ? 1 : 0), tr = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    c.tumPV += tp * 7 * dt; c.tumRV += tr * 8 * dt;
+    const damp = keys.space ? Math.exp(-4.5 * dt) : Math.exp(-.12 * dt); c.tumPV *= damp; c.tumRV *= damp; c.yawSpin *= keys.space ? Math.exp(-2 * dt) : Math.exp(-.1 * dt);
+    c.tumP += c.tumPV * dt; c.tumR += c.tumRV * dt;
+    if (c.hop <= 0 && c.hopV < 0) landCar(c, wrap);
+  } else {
+    c.hop = 0;
+    if (c.tumP || c.tumR) {                                         // 着地後に残った傾きは、ばねのようにゆっくり戻る(ひっくり返ったときは少しずつ起き上がる)
+      const k = Math.exp(-(c.flipT > 0 ? 3.2 : 8) * dt); c.flipT = Math.max(0, (c.flipT || 0) - dt);
+      c.tumP *= k; c.tumR *= k; if (Math.abs(c.tumP) < .002) c.tumP = 0; if (Math.abs(c.tumR) < .002) c.tumR = 0;
     }
-  } else { c.hop = 0; if (c.tumP || c.tumR) { const k = Math.exp(-9 * dt); c.tumP *= k; c.tumR *= k; if (Math.abs(c.tumP) < .002) c.tumP = 0; if (Math.abs(c.tumR) < .002) c.tumR = 0; } }
+  }
+}
+function landCar(c, wrap) {                                           // 着地の判定: 車輪から降りたか・ななめか・ひっくり返ったか
+  const vi = -c.hopV, tp = wrap(c.tumP), tr = wrap(c.tumR), tilt = Math.max(Math.abs(tp), Math.abs(tr));
+  const flips = Math.floor((Math.abs(c.tumP) + Math.PI * .75) / (2 * Math.PI)) + Math.floor((Math.abs(c.tumR) + Math.PI * .75) / (2 * Math.PI));   // 1回転まるごとで1フリップ
+  c.hop = 0; c.tumP = tp; c.tumR = tr;                              // 回転は今の向きに近い姿勢へ(まるごと回った分は捨てる)
+  const good = tilt < .6, rough = tilt < 1.4;
+  shake = Math.min(1.6, shake + vi / 16); c.airBounce = (c.airBounce || 0) + 1;
+  for (let i = 0; i < 8 + Math.round(vi / 2); i++) emit(c.x + rnd(-1.2, 1.2), c.y + .2, c.z + rnd(-1.2, 1.2), c.vx * .2 + rnd(-3, 3), rnd(.5, 3.5), c.vz * .2 + rnd(-3, 3), rnd(.5, .9), rnd(.6, 1.1), 1.6, 0x9a8c70, false, 3);
+  if (good) {                                                       // 車輪から着地: サスがつぶれて小さく跳ね、勢いを保つ
+    sfxCrash(clamp(vi / 26, .2, .6)); c.vx *= .985; c.vz *= .985; c.pitchV = (c.pitchV || 0) + vi * .006;
+    if (vi > 9 && c.airBounce < 3) { c.hopV = vi * .2; c.tumPV *= .3; c.tumRV *= .3; c.yawSpin *= .4; return; }   // 小さくもう一度弾む
+    const pts0 = Math.round((c.airT * 40 + flips * 300 + (flips ? 100 : 60)) * Math.min(1 + Math.max(0, combo) * .1, 10)); score += pts0; combo++; comboT = 2.5;
+    popup((flips ? 'フリップ×' + flips + '! ' : '') + 'ナイスランディング! +' + pts0 + '(滞空' + c.airT.toFixed(1) + '秒)', 'close'); sfxPass();
+    c.air = false; c.tumPV = c.tumRV = 0; c.yawSpin = 0; return;
+  }
+  sfxCrash(clamp(vi / 20, .3, 1)); c.vx *= rough ? .9 : .78; c.vz *= rough ? .9 : .78;   // 斜めに着地・横転: 大きく跳ねて回転を続け、速度を失う
+  if (c.airBounce < 3) { c.hopV = vi * (rough ? .32 : .28); c.tumPV *= .65; c.tumRV *= .65; if (Math.abs(c.tumPV) + Math.abs(c.tumRV) < 1.2) { c.tumPV += rnd(-1.5, 1.5); c.tumRV += rnd(-2, 2); } popup(rough ? 'ラフランディング!' : '横転!'); return; }
+  c.air = false; c.tumPV = c.tumRV = 0; c.yawSpin = 0; c.flipT = 1.4; popup('横転!  立て直し中…');   // 3回目の接地でとまる。傾きは少しずつ起き上がる
 }
 
 /* =====================================================================
@@ -1251,7 +1286,7 @@ function setDriveMode(name, announce = true) {
 const driveMult = v => v < 8 ? lerp(M.launch, M.mid, v / 8) : v < 35 ? M.mid : lerp(M.mid, 1, clamp((v - 35) / (VMAX - 35), 0, 1));   // 発進→中間→高速で倍率を移していく
 // --- 横方向のチューニング値(セレナ想定。実車の諸元ではなくシミュレーター用の設定) ---
 const G_ACC = 9.81;
-let MU_LAT = .82;            // タイヤの横グリップ μ → 最大横加速度 約8.05m/s²(0.82G)
+let MU_LAT = 1.0;            // タイヤの横グリップ μ → 最大横加速度 約9.8m/s²(1.0G)。以前は0.82Gで「曲がりにくい」と言われたので上げた
 let WHEELBASE = 2.87, MIN_TURN_R = 5.7;                     // ホイールベース(m)、最小回転半径(外側前輪の軌跡の半径・セレナ 5.7m)
 let STEER_SF = [[0, 1], [20, 1], [50, .82], [100, .6], [160, .45]];   // 速度(km/h)ごとの舵角の補正
 let UNDERSTEER = .45, ROLL_DEG_PER_G = 2.8;
@@ -1302,7 +1337,7 @@ function placeCar(s, d, speed) {
   car.x = c.x + L[0] * d; car.z = c.z + L[1] * d; car.h = c.h; car.y = c.y;
   car.vx = Math.sin(c.h) * speed; car.vz = Math.cos(c.h) * speed; car.yaw = 0; car.steer = 0;
   car.s = s; car.d = d; camH = c.h; car.prevVf = speed; car.outside = undefined; car.grass = false;
-  car.air = false; car.hop = 0; car.hopV = 0; car.tumP = car.tumR = 0; car.pitch = car.roll = car.pitchV = 0;
+  car.air = false; car.hop = 0; car.hopV = 0; car.tumP = car.tumR = car.tumPV = car.tumRV = car.yawSpin = 0; car.flipT = 0; car.pitch = car.roll = car.pitchV = 0;
   for (const t of traffic) t.prevRel = t.s - car.s;
 }
 const courseStartS = () => course === 'tsukuba' ? LAP_LEN - 6 : 60;   // サーキットはスタートラインの6m手前(ポールポジション)から
@@ -1332,7 +1367,7 @@ function restart() {
   $('ovOver').classList.remove('on');
   if (course === 'tsukuba') beginCountdown(); else state = 'play';
 }
-const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して吹き飛ぶ)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、北の高速の加速車線から本線へ合流する。歩行者や歩道はなし。右上のミニマップで信号・目標を確認(T でワープ)。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
+const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して10m吹き飛ぶ。空中で W/S/A/D と Space で姿勢を整えて着地するとボーナス)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、北の高速の加速車線から本線へ合流する。歩行者や歩道はなし。右上のミニマップで信号・目標を確認(T でワープ)。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
 function refreshCourseUI() {
   document.querySelectorAll('[data-course]').forEach(b => b.classList.toggle('on', b.dataset.course === course));
   $('courseDesc').textContent = COURSE_DESC[course];
@@ -1669,7 +1704,8 @@ function damage(v) { if (DAMAGE_ENABLED) car.health = Math.max(0, car.health - v
    ===================================================================== */
 function stepPlayer(dt) {
   const c = car, play = state === 'play', alive = play && c.health > 0;
-  const air = !!c.air;                                              // 吹き飛んでいる間は、アクセル・ブレーキ・ハンドルは効かない
+  const air = !!c.air;                                              // 吹き飛んでいる間は、アクセル・ブレーキ・ハンドルは効かず、地面からの力(タイヤ・ブレーキ・回生)も受けない
+  const airV = air ? { vx: c.vx, vz: c.vz, h: c.h } : null;
   const hb = alive && keys.space && !air;
   nitroOn = !!(alive && keys.shift && c.nitro > .01 && !c.dead);
   // キーボードは押す/離すの2択なので、ペダルの踏み込みを滑らかにする(アクセル0.12秒・ブレーキ0.3秒で全開)
@@ -1781,6 +1817,7 @@ function stepPlayer(dt) {
   vl += clamp(-vl * (1 - Math.exp(-9 * dt)), -lim, lim);
   c.slip = Math.abs(vl);
   c.vx = Fx * vf + Lx * vl; c.vz = Fz * vf + Lz * vl;
+  if (airV) { const k = Math.exp(-.04 * dt); c.vx = airV.vx * k; c.vz = airV.vz * k; c.h = airV.h + (c.yawSpin || 0) * dt; c.yaw = c.yawSpin || 0; c.slip = 0; }   // 空中: 速度はそのまま(空気抵抗だけ)、向きは回転の勢いで変わる
   c.x += c.vx * dt; c.z += c.vz * dt;
   wallBox(c);                                                        // 見えない壁(サーキットと街の外周)
   if (c.prevVf > .3 && vf < .05 && c.b > .3) c.pitchV = (c.pitchV || 0) - H.stopKick * clamp(-c.accel / G_ACC, 0, 2);   // 止まる瞬間にブレーキの力が抜けて、前のめりの車体が起き上がる(カックン)

@@ -1,0 +1,2511 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>公道ランナー</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;color:#fff;
+    font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;user-select:none}
+  canvas#gl{display:block;width:100vw;height:100vh}
+  #fx{position:fixed;inset:0;pointer-events:none}
+  #flash{position:fixed;inset:0;pointer-events:none;background:#f22;opacity:0}
+  #hud{position:fixed;inset:0;pointer-events:none;font-variant-numeric:tabular-nums;text-shadow:0 1px 4px rgba(0,0,0,.7)}
+  #hud>div{position:absolute}
+  #tl{left:20px;top:16px;font-size:15px;line-height:1.5}
+  #tl b{font-size:28px}
+  #combo{color:#ffd34d;font-weight:700;min-height:22px}
+  #lap{font-size:15px;font-weight:700;letter-spacing:.02em}
+  #stp{font-size:14px;font-weight:700;line-height:1.6;white-space:pre}
+  #mini{position:fixed;left:16px;bottom:16px;width:200px;height:200px;display:none;border-radius:8px;border:2px solid rgba(255,255,255,.35);pointer-events:none}
+  .modes button small{display:block;font-weight:400;font-size:11px;opacity:.85}
+  #pos{left:50%;top:14px;transform:translateX(-50%);font-size:30px;font-weight:800;white-space:nowrap}
+  #board{right:20px;top:96px;font-size:12px;line-height:1.55;text-align:left;background:rgba(0,0,0,.35);border-radius:6px;padding:4px 8px;display:none}
+  #board .me{color:#ffd34d;font-weight:800}
+  #board i{display:inline-block;width:9px;height:9px;margin-right:6px;border-radius:2px;vertical-align:-1px}
+  #dead{left:50%;top:38%;transform:translate(-50%,-50%);font-size:34px;font-weight:900;color:#fff;background:rgba(200,30,30,.85);border-radius:10px;padding:10px 26px;display:none;white-space:nowrap}
+  #corner{left:50%;top:58px;transform:translateX(-50%);font-size:16px;font-weight:700;white-space:nowrap;background:rgba(0,0,0,.4);border-radius:6px;padding:3px 12px;display:none}
+  #corner.warn{background:rgba(220,40,40,.85);animation:blink .5s infinite}
+  #count{left:50%;top:32%;transform:translate(-50%,-50%);font-size:140px;font-weight:900;opacity:0;text-shadow:0 4px 24px rgba(0,0,0,.6)}
+  #count.show{animation:cnt 1s ease-out forwards}
+  @keyframes cnt{0%{opacity:0;transform:translate(-50%,-50%) scale(1.6)}15%{opacity:1;transform:translate(-50%,-50%) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(.9)}}
+  #tr{right:20px;top:16px;text-align:right;font-size:15px;line-height:1.5;width:180px}
+  #tr b{font-size:20px}
+  #br{right:24px;bottom:20px;text-align:right}
+  #spd{font-size:76px;font-weight:700;line-height:1}
+  #br small{font-size:16px;margin-left:6px}
+  #gear{font-size:20px;margin-top:4px}
+  #bc{left:50%;bottom:22px;transform:translateX(-50%);width:280px;text-align:center;font-size:12px}
+  .bar{height:8px;background:rgba(0,0,0,.45);border-radius:4px;overflow:hidden;margin-top:4px}
+  .bar i{display:block;height:100%;width:0;background:#fff}
+  #hp{background:#6f6}
+  #nit{background:#4cf}
+  #rpm{background:#fc4}
+  #batt{background:#5fd4a0}
+  #pop{left:50%;top:22%;transform:translateX(-50%);font-size:34px;font-weight:800;opacity:0;white-space:nowrap}
+  #pop.show{animation:pop 1.1s ease-out forwards}
+  #pop.close{color:#ffd34d}
+  @keyframes pop{0%{opacity:0;transform:translateX(-50%) scale(.7)}12%{opacity:1;transform:translateX(-50%) scale(1.1)}
+    70%{opacity:1;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%) translateY(-24px) scale(1)}}
+  .ov{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);text-align:center}
+  .ov.on{display:flex}
+  .ov h1{font-size:44px;margin:0 0 8px}
+  .ov p{margin:6px 0;line-height:1.7;font-size:15px;opacity:.92}
+  .ov .go{margin-top:18px;font-size:18px;font-weight:700;animation:blink 1.2s infinite}
+  @keyframes blink{50%{opacity:.35}}
+  .courses{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:14px 0 4px;pointer-events:auto}
+  .courses button{font:inherit;font-size:14px;font-weight:700;color:#fff;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);border-radius:8px;padding:9px 14px;cursor:pointer}
+  .courses button.on{background:#fff;color:#000;border-color:#fff}
+  .keys{display:inline-block;text-align:left;margin-top:10px;font-size:14px;line-height:1.9}
+  .keys kbd{background:#fff;color:#000;border-radius:4px;padding:1px 7px;margin-right:6px;font-size:12px;font-weight:700}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="fx"></canvas>
+<div id="flash"></div>
+<canvas id="mini" width="200" height="200"></canvas>
+<div id="hud">
+  <div id="pos"></div>
+  <div id="board"></div>
+  <div id="count"></div>
+  <div id="corner"></div>
+  <div id="dead"></div>
+  <div id="tl"><div>SCORE <b id="score">0</b></div><div id="combo"></div><div id="lap"></div><div id="stp"></div></div>
+  <div id="tr"><div>DIST <b id="dist">0.0</b> km</div><div class="bar"><i id="hp" style="width:100%"></i></div><div style="font-size:11px">車体</div></div>
+  <div id="br"><span id="spd">0</span><small>km/h</small><div id="gear">D</div><div class="bar" style="width:200px;margin-left:auto"><i id="rpm"></i></div><div id="rpmLabel" style="font-size:11px">モーター出力</div><div id="hyInfo" style="font-size:12px;line-height:1.35;opacity:.95;max-width:340px;margin-left:auto;text-align:right"></div><div id="battWrap"><div class="bar" style="width:200px;margin-left:auto"><i id="batt"></i></div><div style="font-size:11px">バッテリー</div></div></div>
+  <div id="bc"><div class="bar"><i id="nit" style="width:100%"></i></div>NITRO&nbsp;[Shift]<br><span style="opacity:.8">発動中は車を貫通・時間とすり抜けで回復</span></div>
+  <div id="pop"></div>
+</div>
+
+<div class="ov on" id="ovStart">
+  <div>
+    <h1>公道ランナー</h1>
+    <p>夕暮れの道を駆け抜けろ。車の間をすり抜けるとスコア、近いほど・速いほど高得点。</p>
+    <div class="courses" id="vehRow" style="display:none"></div>
+    <div class="courses modes"><button data-mode="eco">ECO<small>快適・省エネ</small></button><button data-mode="normal">NORMAL<small>普段使い</small></button><button data-mode="sport">SPORT<small>モーターらしさ</small></button></div>
+    <p id="modeDesc" style="font-size:13px;opacity:.8;margin-top:2px"></p>
+    <div class="courses"><button data-course="public"><kbd>1</kbd>公道(無限ワインディング)</button><button data-course="tsukuba"><kbd>2</kbd>筑波サーキット(周回・ラップ計測)</button><button data-course="straight"><kbd>3</kbd>ベタ踏み直線(カーブなし)</button><button data-course="city"><kbd>4</kbd>都市マップ(信号・駐車・合流)</button><button data-course="smash"><kbd>5</kbd>破壊ステージ(障害物と地雷を壊しまくる)</button></div>
+    <p id="courseDesc" style="font-size:13px;opacity:.8"></p>
+    <div class="keys">
+      <div style="opacity:.85">スタート画面:　<kbd>A</kbd><kbd>D</kbd>コース選択　<kbd>W</kbd><kbd>S</kbd>車種選択　<kbd>Enter</kbd>/<kbd>Space</kbd>スタート</div>
+      <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
+      <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
+      <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF</div>
+    </div>
+    <div class="go">Enter かクリックでスタート</div>
+  </div>
+</div>
+<div class="ov" id="ovOver">
+  <div>
+    <h1 id="overTitle">クラッシュ!</h1>
+    <p id="overText"></p>
+    <div class="go">Enter か R でリトライ　<span style="opacity:.8;font-weight:400">(1 / 2 でコース変更)</span></div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { TSUKUBA } from './assets/tsukuba.js';
+
+/* =====================================================================
+   ユーティリティ
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+const angDiff = (a, b) => { let d = (a - b) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rnd = (a, b) => a + Math.random() * (b - a);
+
+/* =====================================================================
+   レンダラー・シーン
+   ===================================================================== */
+const HORIZON = 0xe9a173;             // 夕焼けの地平線色(霧の色と同じ)
+const canvas = $('gl');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(HORIZON, 90, 1000);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 4000);
+const fx = $('fx'), fxc = fx.getContext('2d');
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  fx.width = w; fx.height = h;
+}
+addEventListener('resize', resize); resize();
+
+const SUN_DIR = new THREE.Vector3(0.55, 0.13, 0.83).normalize();
+const sunLight = new THREE.DirectionalLight(0xffb070, 2.4);
+scene.add(sunLight, sunLight.target);
+scene.add(new THREE.HemisphereLight(0x9db0e0, 0x4a3a2a, 1.1));
+
+/* ---------- テクスチャ(すべてcanvasで自前生成) ---------- */
+function canvasTex(w, h, draw, repeat = true) {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const glowTex = canvasTex(128, 128, (g, w, h) => {
+  const r = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+  r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(.25, 'rgba(255,255,255,.55)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = r; g.fillRect(0, 0, w, h);
+}, false);
+
+/* 道路: 幅16.8m(左端d=+8.4〜右端d=-8.4)。V方向は12mで1周期(破線の周期) */
+const ROAD_W = 16.8, ROAD_HALF = 8.4, V_LEN = 12;
+const roadTex = canvasTex(1024, 1024, (g, w, h) => {
+  g.fillStyle = '#3b3b40'; g.fillRect(0, 0, w, h);
+  const rng = mulberry32(5);
+  for (let i = 0; i < 40000; i++) {
+    const v = rng();
+    g.fillStyle = v < .5 ? `rgba(255,255,255,${rng() * .07})` : `rgba(0,0,0,${rng() * .14})`;
+    g.fillRect(rng() * w, rng() * h, 1 + rng() * 2, 1 + rng() * 2);
+  }
+  const px = d => (ROAD_HALF - d) / ROAD_W * w;            // d(m) → x(px)(左端d=+8.4がx=0)
+  const py = m => m / V_LEN * h;                           // 進行方向m → y(px)
+  g.fillStyle = 'rgba(160,150,130,.18)';                    // 路肩を少し明るく
+  g.fillRect(0, 0, px(7.2), h); g.fillRect(px(-7.2), 0, w - px(-7.2), h);
+  const solid = (d, wd, col) => { g.fillStyle = col; g.fillRect(px(d) - wd * w / ROAD_W / 2, 0, wd * w / ROAD_W, h); };
+  const dash = (d, wd, col) => { g.fillStyle = col; g.fillRect(px(d) - wd * w / ROAD_W / 2, 0, wd * w / ROAD_W, py(4.5)); };
+  solid(0.2, .13, '#e0b020'); solid(-0.2, .13, '#e0b020');   // 中央線(黄色の二重線)
+  solid(7.2, .18, '#e8e8e8'); solid(-7.2, .18, '#e8e8e8');   // 外側線
+  dash(3.6, .16, '#e8e8e8'); dash(-3.6, .16, '#e8e8e8');     // 車線境界(破線)
+});
+const roadTexTsukuba = canvasTex(1024, 1024, (g, w, h) => {      // サーキットの路面: 中央線なし、外側線と縁石(赤白)
+  g.fillStyle = '#34343a'; g.fillRect(0, 0, w, h);
+  const rng = mulberry32(11);
+  for (let i = 0; i < 45000; i++) {
+    g.fillStyle = rng() < .5 ? `rgba(255,255,255,${rng() * .06})` : `rgba(0,0,0,${rng() * .16})`;
+    g.fillRect(rng() * w, rng() * h, 1 + rng() * 2, 1 + rng() * 2);
+  }
+  const px = d => (ROAD_HALF - d) / ROAD_W * w;
+  for (let i = 0; i < 6; i++) {                                  // 縁石: 路肩(7.2〜8.4m)に2mごと赤・白
+    g.fillStyle = i % 2 ? '#e8e8e8' : '#c62828';
+    g.fillRect(0, i * h / 6, px(7.2), h / 6); g.fillRect(px(-7.2), i * h / 6, w - px(-7.2), h / 6);
+  }
+  const wd = .18 * w / ROAD_W; g.fillStyle = '#e8e8e8';
+  g.fillRect(px(7.2) - wd / 2, 0, wd, h); g.fillRect(px(-7.2) - wd / 2, 0, wd, h);
+});
+const checkerTex = canvasTex(256, 32, (g, w, h) => {              // スタートラインの市松模様
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 32; x++) { g.fillStyle = (x + y) % 2 ? '#111' : '#f2f2f2'; g.fillRect(x * w / 32, y * h / 4, w / 32, h / 4); }
+});
+const grassTex = canvasTex(256, 256, (g, w, h) => {
+  g.fillStyle = '#56663a'; g.fillRect(0, 0, w, h);
+  const rng = mulberry32(9);
+  for (let i = 0; i < 6000; i++) {
+    g.fillStyle = `hsla(${70 + rng() * 40},35%,${25 + rng() * 22}%,.35)`;
+    g.fillRect(rng() * w, rng() * h, 2 + rng() * 3, 2 + rng() * 3);
+  }
+});
+grassTex.repeat.set(1, 1);
+const mountTex = canvasTex(2048, 256, (g, w, h) => {
+  const hor = new THREE.Color(HORIZON).getStyle();
+  const grd = g.createLinearGradient(0, 100, 0, h);
+  grd.addColorStop(0, 'rgb(96,88,138)'); grd.addColorStop(1, hor);
+  g.fillStyle = grd; g.beginPath(); g.moveTo(0, h);
+  const T = 2 * Math.PI / w;
+  for (let x = 0; x <= w; x += 4) {
+    const y = 130 + 34 * Math.sin(x * T * 3) + 22 * Math.sin(x * T * 7 + 1) + 11 * Math.sin(x * T * 19 + 2) + 5 * Math.sin(x * T * 41);
+    g.lineTo(x, y);
+  }
+  g.lineTo(w, h); g.closePath(); g.fill();
+}, false);
+
+/* ---------- 空・太陽・山・地面 ---------- */
+const sky = (() => {
+  const R = 2500, geo = new THREE.SphereGeometry(R, 32, 20);
+  const p = geo.attributes.position, col = new Float32Array(p.count * 3);
+  const cH = new THREE.Color(HORIZON), cM = new THREE.Color(0x8a93c4), cT = new THREE.Color(0x1f3a75), c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    const y = p.getY(i) / R;
+    if (y <= 0) c.copy(cH);
+    else if (y < .22) c.copy(cH).lerp(cM, y / .22);
+    else c.copy(cM).lerp(cT, clamp((y - .22) / .6, 0, 1));
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+  m.renderOrder = -3; scene.add(m); return m;
+})();
+function makeGlow(color, size, opacity, fog = false) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false, fog }));
+  s.scale.set(size, size, 1); return s;
+}
+const sunCore = makeGlow(0xfff2d0, 380, 1), sunHalo = makeGlow(0xff9a50, 1500, .75);
+sunCore.renderOrder = sunHalo.renderOrder = -2; scene.add(sunHalo, sunCore);
+const mountains = (() => {
+  const geo = new THREE.CylinderGeometry(1800, 1800, 300, 48, 1, true);
+  const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: mountTex, side: THREE.BackSide, transparent: true, fog: false, depthWrite: false }));
+  m.renderOrder = -1; scene.add(m); return m;
+})();
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x4d5a33 }));
+scene.add(ground);
+
+/* =====================================================================
+   道路の生成(無限に続くワインディング)
+   道路座標: s=進行距離, d=中心線からの左方向オフセット(左側通行なので自車線は d>0)
+   ===================================================================== */
+const STEP = 2;                       // 中心線の分解能(m)
+const CAR_LIM = 7.45;                 // ガードレールに当たる位置(車体中心)
+let course = 'public';                // 'public'(無限の公道) / 'tsukuba'(筑波サーキットの周回)
+const PX = [0], PY = [0], PZ = [0], PH = [0];
+// --- 筑波サーキット: 1周ぶんの中心線(2m間隔)。周回するたびに同じ場所へ戻る閉じた線
+const LAP_N = TSUKUBA.length / 2, LAP_LEN = LAP_N * STEP;
+const lapX = [], lapZ = [], lapY = [], lapH = [], lapK = [];
+let lapDH = 0;                        // 1周で向きが変わる量(±2π)。角度を巻き戻さず連続させるために使う
+let GROUND_Y = 0;
+function elevTsukuba(s) {             // 起伏(1周でつながる)。実際の高低差は未確認のため控えめな値
+  const f = (s % LAP_LEN) / LAP_LEN * Math.PI * 2;
+  return 2.6 * Math.sin(f + .6) + 1.1 * Math.sin(3 * f + 2) + .5 * Math.sin(5 * f);
+}
+(function buildLap() {
+  for (let i = 0; i < LAP_N; i++) { lapX.push(TSUKUBA[2 * i]); lapZ.push(TSUKUBA[2 * i + 1]); lapY.push(elevTsukuba(i * STEP)); }
+  const hs = [];
+  for (let i = 0; i < LAP_N; i++) {   // 前後2点ぶんの差で向きを求め、なめらかにする
+    const a = (i - 2 + LAP_N) % LAP_N, b = (i + 2) % LAP_N;
+    let h = Math.atan2(lapX[b] - lapX[a], lapZ[b] - lapZ[a]);
+    if (i > 0) { while (h - hs[i - 1] > Math.PI) h -= Math.PI * 2; while (h - hs[i - 1] < -Math.PI) h += Math.PI * 2; }
+    hs.push(h);
+  }
+  lapDH = (hs[LAP_N - 1] - hs[0]) + angDiff(hs[0], hs[LAP_N - 1]);
+  for (const h of hs) lapH.push(h);
+  GROUND_Y = Math.min(...lapY) - .3;
+  const raw = [];
+  for (let i = 0; i < LAP_N; i++) { const dh = i < LAP_N - 1 ? lapH[i + 1] - lapH[i] : lapH[0] + lapDH - lapH[i]; raw.push(Math.abs(dh) / STEP); }
+  for (let i = 0; i < LAP_N; i++) { let m = 0; for (let j = -4; j <= 4; j++) m = Math.max(m, raw[(i + j + LAP_N) % LAP_N]); lapK.push(m); }   // 前後8mの最大(ならして保守的に)
+})();
+const kAt = s => lapK[Math.floor((((s % LAP_LEN) + LAP_LEN) % LAP_LEN) / STEP) % LAP_N];   // 周回コースの曲率(1/半径)
+const lapGrid = new Map(), GRID = 24;   // 周回コースの近くかどうかを調べる格子(木がコース上に生えないように)
+for (let i = 0; i < LAP_N; i++) { const k = Math.floor(lapX[i] / GRID) + ',' + Math.floor(lapZ[i] / GRID); if (!lapGrid.has(k)) lapGrid.set(k, []); lapGrid.get(k).push(i); }
+function nearTrack(x, z, minD) {
+  const cx = Math.floor(x / GRID), cz = Math.floor(z / GRID);
+  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (const i of lapGrid.get((cx + a) + ',' + (cz + b)) || []) {
+    const dx = x - lapX[i], dz = z - lapZ[i]; if (dx * dx + dz * dz < minD * minD) return true;
+  }
+  return false;
+}
+function resetRoad() { PX.length = PY.length = PZ.length = PH.length = 0; if (course !== 'tsukuba') { PX.push(0); PY.push(0); PZ.push(0); PH.push(0); } }
+const CURVE_SCALE = .75;              // 横グリップを現実的にしたぶん、カーブを25%ゆるく(最小半径 約155m)
+function curv(s) {                    // 曲率(1/半径)
+  const amp = 0.15 + 0.85 * smooth(s / 700);
+  const mod = 0.55 + 0.45 * Math.sin(s / 1100 + 0.7);
+  return CURVE_SCALE * amp * mod * (0.0042 * Math.sin(s / 190) + 0.0028 * Math.sin(s / 83 + 1.9) + 0.0016 * Math.sin(s / 41 + 0.4));
+}
+function elev(s) {
+  return smooth(s / 500) * (6 * Math.sin(s / 310 + 0.5) + 2.2 * Math.sin(s / 117 + 2));
+}
+function ensure(n) {
+  while (PX.length <= n) {
+    if (course === 'tsukuba') {
+      const m = PX.length, k = m % LAP_N, lap = (m - k) / LAP_N;
+      PX.push(lapX[k]); PZ.push(lapZ[k]); PY.push(lapY[k]); PH.push(lapH[k] + lap * lapDH); continue;
+    }
+    if (course === 'straight' || course === 'smash') {                      // ベタ踏み直線(破壊ステージも同じ道): カーブも起伏もない、永遠にまっすぐな道
+      const m = PX.length; PX.push(0); PZ.push(m * STEP); PH.push(0); PY.push(0); continue;
+    }
+    const m = PX.length, s = (m - 1) * STEP, h0 = PH[m - 1];
+    const h1 = h0 + curv(s + STEP / 2) * STEP, hm = (h0 + h1) / 2;
+    PX.push(PX[m - 1] + Math.sin(hm) * STEP); PZ.push(PZ[m - 1] + Math.cos(hm) * STEP);
+    PH.push(h1); PY.push(elev(m * STEP));
+  }
+}
+function centerAt(s) {
+  const n = Math.max(0, s) / STEP, i = Math.floor(n), t = n - i;
+  ensure(i + 2);
+  return {
+    x: lerp(PX[i], PX[i + 1], t), y: lerp(PY[i], PY[i + 1], t), z: lerp(PZ[i], PZ[i + 1], t),
+    h: lerp(PH[i], PH[i + 1], t), sl: (PY[i + 1] - PY[i]) / STEP, k: (PH[i + 1] - PH[i]) / STEP   // k: 曲率(1/半径)
+  };
+}
+function nearestLapNode(x, z) {
+  const cx = Math.floor(x / GRID), cz = Math.floor(z / GRID); let best = 1e18, bi = -1;
+  for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) for (const i of lapGrid.get((cx + a) + ',' + (cz + b)) || []) { const dx = x - lapX[i], dz = z - lapZ[i], d2 = dx * dx + dz * dz; if (d2 < best) { best = d2; bi = i; } }
+  return bi;
+}
+function locate(x, z, sHint) {        // ワールド座標 → 道路座標
+  const n0 = Math.max(0, Math.floor((sHint - 40) / STEP)), n1 = Math.floor((sHint + 80) / STEP);
+  ensure(n1 + 3);
+  let best = 1e18, bn = n0;
+  for (let n = n0; n <= n1; n++) { const dx = x - PX[n], dz = z - PZ[n], d2 = dx * dx + dz * dz; if (d2 < best) { best = d2; bn = n; } }
+  if (course === 'tsukuba' && best > 900) {        // コースから30m以上離れた(ショートカットで別の区間へ出た): 周回コース全体から最寄りの中心線を探す
+    const k = nearestLapNode(x, z);
+    if (k >= 0) { const nn = k + LAP_N * Math.round((sHint / STEP - k) / LAP_N); ensure(nn + 3); const dx = x - PX[nn], dz = z - PZ[nn], d2 = dx * dx + dz * dz; if (d2 < best * .8) { best = d2; bn = nn; } }
+  }
+  const h = PH[bn];
+  const s = Math.max(0, bn * STEP + (x - PX[bn]) * Math.sin(h) + (z - PZ[bn]) * Math.cos(h));
+  const c = centerAt(s);
+  const d = (x - c.x) * Math.cos(c.h) - (z - c.z) * Math.sin(c.h);
+  return { s, d, h: c.h, y: c.y, sl: c.sl };
+}
+const COURSE_CFG = { public: { grassW: 90, dishDepth: 2.2, dishSpan: 81.5 }, straight: { grassW: 90, dishDepth: 2.2, dishSpan: 81.5 }, smash: { grassW: 90, dishDepth: 2.2, dishSpan: 81.5 }, tsukuba: { grassW: 23, dishSpan: 14 } };
+const dish = (d, y = 0) => {          // 路肩から外へ下がる地面。サーキットは地面の高さまで一気に下る(土手)
+  const cfg = COURSE_CFG[course], depth = course === 'tsukuba' ? Math.max(2.6, y - GROUND_Y) : cfg.dishDepth;
+  return 0.03 + depth * clamp((Math.abs(d) - 8.5) / cfg.dishSpan, 0, 1);
+};
+
+/* ---------- チャンク(120mごとに生成/破棄) ---------- */
+const CHN = 60, CHL = CHN * STEP;
+const matRoad = new THREE.MeshStandardMaterial({ map: roadTex, roughness: .92, metalness: 0 });
+const matRoadTsukuba = new THREE.MeshStandardMaterial({ map: roadTexTsukuba, roughness: .9, metalness: 0 });
+const matChecker = new THREE.MeshBasicMaterial({ map: checkerTex });
+const matGantry = new THREE.MeshLambertMaterial({ color: 0x9aa0a6 });
+const matGrass = new THREE.MeshLambertMaterial({ map: grassTex });
+const matRail = new THREE.MeshStandardMaterial({ color: 0xcfd3d8, roughness: .5, metalness: .6, side: THREE.DoubleSide });
+const matPost = new THREE.MeshLambertMaterial({ color: 0x8a8d90 });
+const matLampHead = new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false });
+const matTrunk = new THREE.MeshLambertMaterial({ color: 0x4a3524 });
+const matCrown = new THREE.MeshLambertMaterial({ color: 0xffffff });
+const geoPost = new THREE.BoxGeometry(.12, .9, .12).translate(0, .45, 0);
+const geoPole = new THREE.CylinderGeometry(.08, .11, 7.5, 6).translate(0, 3.75, 0);
+const geoLampHead = new THREE.BoxGeometry(.5, .14, .9).translate(0, 7.5, 0);
+const geoTrunk = new THREE.CylinderGeometry(.22, .3, 2, 6).translate(0, 1, 0);
+const geoCrown = new THREE.ConeGeometry(1.7, 5.2, 7).translate(0, 2.6, 0);
+
+function stripMesh(n0, offsets, yFn, uFn, vScale, mat) {
+  const nOff = offsets.length, pos = [], uv = [], nor = [], idx = [];
+  for (let k = 0; k <= CHN; k++) {
+    const n = n0 + k, s = n * STEP; ensure(n + 1);
+    const h = PH[n], Lx = Math.cos(h), Lz = -Math.sin(h);
+    for (let j = 0; j < nOff; j++) {
+      const d = offsets[j];
+      pos.push(PX[n] + Lx * d, PY[n] + yFn(d, PY[n]), PZ[n] + Lz * d);
+      uv.push(uFn(d), s / vScale); nor.push(0, 1, 0);
+    }
+  }
+  for (let k = 0; k < CHN; k++) for (let j = 0; j < nOff - 1; j++) {
+    const a = k * nOff + j, b = a + 1, c = a + nOff, d = c + 1;
+    idx.push(a, b, c, b, d, c);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setIndex(idx);
+  return new THREE.Mesh(g, mat);
+}
+function railMesh(n0, side) {           // ガードレール本体(縦の帯)
+  const pos = [], nor = [], idx = [];
+  for (let k = 0; k <= CHN; k++) {
+    const n = n0 + k; ensure(n + 1);
+    const h = PH[n], Lx = Math.cos(h) * side, Lz = -Math.sin(h) * side;
+    for (const dy of [.42, .86]) { pos.push(PX[n] + Lx * (ROAD_HALF), PY[n] + dy, PZ[n] + Lz * ROAD_HALF); nor.push(-Lx, 0, -Lz); }
+  }
+  for (let k = 0; k < CHN; k++) { if (railBroken(side, n0 + k)) continue; const a = k * 2, b = a + 1, c = a + 2, d = a + 3; idx.push(a, b, c, b, d, c); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setIndex(idx);
+  return new THREE.Mesh(g, matRail);
+}
+/* ---------- 破壊: ガードレール(12mごとの区画)と木は壊れたまま残る ---------- */
+const brokenRails = new Set(), treeGone = new Set(), damagedChunks = new Set();
+const RAIL_SEG = 6;                       // ガードレールが壊れる1区画(ノード6個=12m)
+const nnOf = n => course === 'tsukuba' ? ((n % LAP_N) + LAP_N) % LAP_N : n;   // 周回コースは1周ぶんの番号に直す(何周目でも同じ場所は同じ状態)
+const railKey = (side, n) => (side > 0 ? 'L' : 'R') + Math.floor(nnOf(n) / RAIL_SEG);
+const railBroken = (side, n) => brokenRails.has(railKey(side, n));
+const chunks = new Map();
+function buildChunk(ci) {
+  const n0 = ci * CHN, grp = new THREE.Group(), geos = [];
+  const gw = COURSE_CFG[course].grassW;
+  const road = stripMesh(n0, [ROAD_HALF, -ROAD_HALF], () => 0, d => (ROAD_HALF - d) / ROAD_W, V_LEN, course === 'tsukuba' ? matRoadTsukuba : matRoad);
+  const gl = stripMesh(n0, [gw, 8.5], (d, y) => -dish(d, y), d => d / 6, 6, matGrass);
+  const gr = stripMesh(n0, [-8.5, -gw], (d, y) => -dish(d, y), d => -d / 6, 6, matGrass);
+  const rl = railMesh(n0, 1), rr = railMesh(n0, -1);
+  grp.add(road, gl, gr, rl, rr); geos.push(road.geometry, gl.geometry, gr.geometry, rl.geometry, rr.geometry);
+  if (course === 'tsukuba') {          // スタート/フィニッシュライン(市松模様)と門
+    for (let lap = Math.floor(n0 / LAP_N); lap * LAP_N < n0 + CHN; lap++) {
+      const n = lap * LAP_N; if (n < n0 || n >= n0 + CHN) continue;
+      const gg = new THREE.Group(); gg.position.set(PX[n], PY[n], PZ[n]); gg.rotation.y = PH[n];
+      const line = new THREE.Mesh(new THREE.PlaneGeometry(ROAD_W - 2.4, 2.4).rotateX(-Math.PI / 2), matChecker); line.position.y = .04; gg.add(line); geos.push(line.geometry);
+      const beam = new THREE.Mesh(new THREE.BoxGeometry(ROAD_W + 3.2, .9, .5), matChecker); beam.position.y = 7; gg.add(beam); geos.push(beam.geometry);
+      for (const sx of [1, -1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(.5, 7.2, .5), matGantry); post.position.set(sx * (ROAD_HALF + 1.4), 3.6, 0); gg.add(post); geos.push(post.geometry); }
+      grp.add(gg);
+    }
+  }
+
+  const rng = mulberry32(ci * 7919 + 13);
+  // ガードレールの支柱(4mおき)
+  const posts = new THREE.InstancedMesh(geoPost, matPost, CHL / 4 * 2);
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), S = new THREE.Vector3(1, 1, 1);
+  let pi = 0;
+  for (let m = 0; m < CHL; m += 4) for (const side of [1, -1]) {
+    const c = centerAt(n0 * STEP + m);
+    P.set(c.x + Math.cos(c.h) * side * (ROAD_HALF + .12), c.y, c.z - Math.sin(c.h) * side * (ROAD_HALF + .12));
+    if (railBroken(side, n0 + m / STEP)) S.set(0, 0, 0); else S.set(1, 1, 1);          // 壊れた区画の支柱は消す
+    Q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), c.h); posts.setMatrixAt(pi++, M.compose(P, Q, S));
+  }
+  S.set(1, 1, 1);
+  grp.add(posts);
+  // 街灯(60mおき・左側のみ)
+  const lampN = CHL / 60, poles = new THREE.InstancedMesh(geoPole, matPost, lampN), heads = new THREE.InstancedMesh(geoLampHead, matLampHead, lampN);
+  for (let i = 0; i < lampN; i++) {
+    const c = centerAt(n0 * STEP + i * 60 + 20), off = ROAD_HALF + .9;
+    P.set(c.x + Math.cos(c.h) * off, c.y - .02, c.z - Math.sin(c.h) * off);
+    Q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), c.h);
+    poles.setMatrixAt(i, M.compose(P, Q, S)); heads.setMatrixAt(i, M.compose(P, Q, S));
+  }
+  grp.add(poles, heads);
+  // 木
+  const TN = 26, trunks = new THREE.InstancedMesh(geoTrunk, matTrunk, TN * 2), crowns = new THREE.InstancedMesh(geoCrown, matCrown, TN * 2);
+  const col = new THREE.Color(); let ti = 0; const treeList = [];
+  for (const side of [1, -1]) for (let i = 0; i < TN; i++) {
+    const d = 13 + Math.pow(rng(), 1.5) * 70, c = centerAt(n0 * STEP + rng() * CHL), sc = .8 + rng() * 1.1;
+    P.set(c.x + Math.cos(c.h) * side * d, c.y - dish(d, c.y), c.z - Math.sin(c.h) * side * d);
+    Q.identity(); S.set(sc, sc, sc);
+    let alive = course !== 'smash' && !(course === 'tsukuba' && nearTrack(P.x, P.z, 14)) && !treeGone.has(ci + ':' + ti);   // 別の区間のコース上には生やさない / 倒された木は生えない
+    if (!alive) S.set(0, 0, 0);
+    trunks.setMatrixAt(ti, M.compose(P, Q, S)); P.y += 1.4 * sc; crowns.setMatrixAt(ti, M.compose(P, Q, S));
+    treeList.push({ x: P.x, z: P.z, y: P.y - 1.4 * sc, sc, ti, alive });
+    const r = rng();
+    col.setHSL(r < .7 ? .25 + rng() * .08 : .06 + rng() * .06, .5, .16 + rng() * .1); crowns.setColorAt(ti, col); ti++;
+  }
+  grp.add(trunks, crowns);
+  const sm = course === 'smash' ? buildSmashObstacles(ci, grp) : null;      // 破壊ステージ: 障害物を敷き詰める
+  scene.add(grp);
+  chunks.set(ci, { grp, geos, inst: [posts, poles, heads, trunks, crowns, ...(sm ? Object.values(sm.meshes) : [])], trees: treeList, trunks, crowns, smash: sm });
+}
+function disposeChunk(ci) { const ch = chunks.get(ci); if (!ch) return; scene.remove(ch.grp); ch.geos.forEach(g => g.dispose()); ch.inst.forEach(m => m.dispose()); chunks.delete(ci); }
+function rebuildChunk(ci) { if (chunks.has(ci)) { disposeChunk(ci); buildChunk(ci); } }
+function updateChunks(s, budget = 2) {
+  if (isCity()) return;
+  const lo = Math.floor((s - 220) / CHL), hi = Math.floor((s + 1050) / CHL);
+  for (let ci = Math.max(0, lo); ci <= hi && budget > 0; ci++) if (!chunks.has(ci)) { buildChunk(ci); budget--; }
+  for (const [ci] of chunks) if (ci < lo - 1 || ci > hi + 1) disposeChunk(ci);
+}
+
+/* =====================================================================
+   クルマのモデル(箱の組み合わせ)
+   ===================================================================== */
+const GLASS = new THREE.MeshStandardMaterial({ color: 0x141a22, roughness: .1, metalness: .8 });
+const TIRE = new THREE.MeshLambertMaterial({ color: 0x151515 });
+const DARK = new THREE.MeshLambertMaterial({ color: 0x1a1a1c });
+const TAIL_DIM = new THREE.MeshBasicMaterial({ color: 0x7a1414 });
+const HEAD_MAT = new THREE.MeshBasicMaterial({ color: 0xfff1c8 });
+const geoWheel = new THREE.CylinderGeometry(.34, .34, .24, 14).rotateZ(Math.PI / 2);
+function box(w, h, l, mat, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), mat); m.position.set(x, y, z); return m; }
+
+function makeCar(o) {
+  const g = new THREE.Group(), y0 = .3;
+  const bm = new THREE.MeshStandardMaterial({ color: o.color, roughness: .35, metalness: .45 });
+  let cargoTop = 0;
+  if (o.truck) {
+    g.add(box(o.w * .9, .45, o.l, DARK, 0, y0 + .22, 0));
+    g.add(box(o.w * .96, 1.5, 1.7, bm, 0, y0 + .45 + .75, o.l / 2 - 1.05));
+    g.add(box(o.w * .9, .5, .08, GLASS, 0, y0 + 1.5, o.l / 2 - .2));
+    g.add(box(o.w, 2.0, o.l - 2.2, new THREE.MeshLambertMaterial({ color: 0xe8e8e0 }), 0, y0 + .45 + 1.0, -1.1));
+  } else {
+    g.add(box(o.w, o.h, o.l, bm, 0, y0 + o.h / 2, 0));
+    g.add(box(o.w * .88, o.ch, o.cl, GLASS, 0, y0 + o.h + o.ch / 2, o.cz));
+    const roof = new THREE.Mesh(new THREE.PlaneGeometry(o.w * .88, o.cl * .96).rotateX(-Math.PI / 2), bm);   // 片面(車内からは見えない)
+    roof.position.set(0, y0 + o.h + o.ch + .005, o.cz); g.add(roof);
+  }
+  const wheels = [];
+  for (const sx of [1, -1]) for (const sz of [1, -1]) {
+    const piv = new THREE.Group(); piv.position.set(sx * (o.w / 2 - .08), .34, sz * o.l * .32);
+    const m = new THREE.Mesh(geoWheel, TIRE); piv.add(m); g.add(piv); wheels.push({ piv, m, front: sz > 0 });
+  }
+  const tailMat = o.brakeable ? new THREE.MeshBasicMaterial({ color: 0x8a1010 }) : TAIL_DIM;
+  const ty = y0 + (o.truck ? .7 : o.h * .75);
+  for (const sx of [1, -1]) {
+    g.add(box(.36, .13, .05, tailMat, sx * o.w * .32, ty, -o.l / 2 - .01));
+    g.add(box(.3, .13, .05, HEAD_MAT, sx * o.w * .32, y0 + (o.truck ? .6 : o.h * .6), o.l / 2 + .01));
+    const gt = makeGlow(0xff3020, 1.3, .8); gt.position.set(sx * o.w * .32, ty, -o.l / 2 - .1); g.add(gt);
+    const gh = makeGlow(0xffe8b0, 2.4, .9); gh.position.set(sx * o.w * .32, y0 + (o.truck ? .6 : o.h * .6), o.l / 2 + .2); g.add(gh);
+  }
+  return { group: g, wheels, tailMat, w: o.w, l: o.l };
+}
+const PAINTS = [0xf2f2f2, 0xf2f2f2, 0xe0e0e0, 0xb8bcc2, 0x22252b, 0x22252b, 0xa01818, 0x1c3f8a, 0x2f6b46, 0xd9c23a];
+const TYPES = [
+  { name: 'sedan', w: 1.8, l: 4.5, h: .55, ch: .5, cl: 2.1, cz: -.2, wt: 5 },
+  { name: 'kei', w: 1.48, l: 3.4, h: .95, ch: .55, cl: 2.0, cz: -.1, wt: 3 },
+  { name: 'van', w: 1.85, l: 4.8, h: .95, ch: .8, cl: 3.4, cz: -.3, wt: 2 },
+  { name: 'truck', w: 2.2, l: 6.6, truck: true, wt: 1.4 },
+];
+function pickType() {
+  const tot = TYPES.reduce((a, t) => a + t.wt, 0); let r = Math.random() * tot;
+  for (const t of TYPES) { if ((r -= t.wt) < 0) return t; } return TYPES[0];
+}
+
+let PLAYER = null, carMesh = null, cockpit = null, VEH = null, vehicleId = '';   // 現在の自車(setVehicle で差し替わる)
+
+/* ---------- GLBモデルの読み込み(夕焼け空を環境マップにして金属ツヤを出す) ---------- */
+const envTex = (() => {
+  const es = new THREE.Scene(); es.add(new THREE.Mesh(sky.geometry, sky.material));
+  const sun = makeGlow(0xfff2d0, 500, 1); sun.position.copy(SUN_DIR).multiplyScalar(2000); es.add(sun);
+  return new THREE.PMREMGenerator(renderer).fromScene(es, 0, 1, 3000).texture;
+})();
+// yaw: モデルの前方向を+Zに合わせる回転。読み込み後、中心を原点・底面を地面にして全長lengthに拡縮する
+function loadCarModel(url, yaw, length, onLoad) {
+  new GLTFLoader().load(url, gltf => {
+    const inner = gltf.scene, holder = new THREE.Group();
+    inner.rotation.y = yaw; holder.add(inner); holder.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(holder), size = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
+    inner.position.set(-ctr.x, -bb.min.y, -ctr.z);
+    const k = length / size.z; holder.scale.setScalar(k);
+    inner.traverse(o => { if (o.isMesh) { o.material.envMap = envTex; o.material.envMapIntensity = .9; o.material.needsUpdate = true; } });
+    holder.userData.w = size.x * k; holder.userData.h = size.y * k;
+    onLoad(holder);
+  }, undefined, err => console.warn('GLB load failed, using box car:', url, err));
+}
+
+/* =====================================================================
+   自車の定義(車両システム)
+   新しい車は VEHICLES に1件足すだけで使える。3Dデータ(GLB)が届くまでは model を null にしておけば、箱の仮モデルで動く。
+   使い方: ① GLBを assets/ に置く ② その車の model.url に書く ③ 向き(yaw)・全長・カメラ・運転席の位置(eye)を合わせる ④ ready:true にする(スタート画面の選択肢に出る)
+   ・phys:      加速・ブレーキ・グリップ・回転半径・重心など(NORMALモードの標準値)
+   ・powertrain: 'series'(シリーズ式ハイブリッド: バッテリー+発電エンジン) / 'ths'(トヨタの動力分割式: エンジンも駆動に参加) / 'ehev'(ホンダの2モーター式: モーター駆動主体+高速はエンジン直結) / 'ev'(電気自動車: 発電なし) / 'ice'(ガソリン車: 変速・回転数・エンジン音。バッテリーなし)
+   ===================================================================== */
+// ★ ノア/ステップワゴン(ハイブリッド2車種)のスイッチ。false=無効(車種選択にも出ず、URLの ?car= でも呼び出せない)。使うときはこの1行を true にするだけ
+const HYBRIDS_ENABLED = false;
+// ★ 車体ダメージ(ぶつかると車体が減り、0で「壊れてゲームオーバー」)のスイッチ。false=ダメージなし(ぶつかっても走り続けられ、車体ゲージも非表示)。戻すときはこの1行を true にするだけ。ガードレール・木が壊れる表現やコンボ切れは別で、そのまま残る
+const DAMAGE_ENABLED = false;
+const STEER_SF_STD = [[0, 1], [20, 1], [50, .82], [100, .6], [160, .45]];
+const VEHICLES = {
+  serena: {
+    name: '日産 セレナ e-POWER', ready: true,
+    powertrain: { type: 'series', battery0: .65 },
+    phys: { ACC0: 4.35, VMAX: 52, ACC_TABLE: [[0, 4.35], [55, 4.28], [60, 3.92], [70, 3.33], [80, 2.86], [90, 2.48], [100, 2.16], [110, 1.88], [120, 1.64], [130, 1.42], [140, 1.21], [150, 1.02], [160, .84], [170, .66], [180, .49], [187, 0]], DRAG: .0008, COAST: 1.4, BRAKE_MAX: 9.0, MU_LAT: .82, WHEELBASE: 2.87, MIN_TURN_R: 5.7, TRACK: 1.48, CG_H: .68, FRONT_STATIC: .60, STEER_SF: STEER_SF_STD, UNDERSTEER: .45, ROLL_DEG_PER_G: 2.8, REAR_MIN: .30 },
+    box: {                                  // GLBが読めるまで(またはmodelがnullのとき)使う箱の仮モデル
+      color: 0xd8201c, w: 1.86, l: 4.4, h: .48, ch: .56, cl: 1.7, cz: -.25, wing: true, len: 4.4,
+      hit: { off: 1.3, r: .95 }, cam: { dist: 6.3, h: 2.1, look: 1.2 }, eye: [-.4, 1.15, 0],
+      dash: [1.5, .16, .42, 0, .9, .42], wheel: { r: .17, pos: [-.4, .93, .3], rot: -1.0 }, pillar: { dx: .72, y: 1.08, z: .5, h: .55, rot: -.7 }, flame: { x: .5, y: .42, z: -2.25 },
+    },
+    model: {                                // 3Dモデル。yaw: モデルの前方向を+Zに合わせる回転、length: 全長(m)に拡縮
+      url: 'assets/serena_player.glb', yaw: Math.PI / 2, length: 4.7,
+      hit: { off: 1.5, r: .925 }, cam: { dist: 7.6, h: 3.0, look: 1.5 }, eye: [-.42, 1.32, .55],
+      cockpit: { dash: [1.7, .3, .5, 0, .8, 1.55], wheel: { r: .19, pos: [-.42, .98, 1.15], rot: -1.15 }, pillar: { dx: .9, y: 1.35, z: 1.3, h: .6, rot: -.6 } },
+      tail: { x: .78, y: 1.0 }, flameY: .4,
+    },
+  },
+  gtr: {                                    // 日産 GT-R NISMO(R35最終型)。公式諸元: 4,700×1,895×1,370mm / WB 2,780 / トレッド 1,600 / 1,720kg / 最小回転半径5.7m / 600ps 652N·m / 6速DCT / 4WD / 前255/40R20・後285/35R20。それ以外(加速表・ギア上限速度・操作感)は推定。3Dモデルが届くまでは箱の仮モデル
+    name: '日産 GT-R NISMO', ready: true, rivalPace: 1.2,     // ライバルの強さの倍率(筑波のレース。GT-Rは圧倒的に速いので全体に強めにする)
+    powertrain: { type: 'ice', cyl: 6, idle: 800, redline: 7100, gears: [17.5, 30.9, 44.5, 57, 71, 89], shiftTime: .06 },   // 6速デュアルクラッチ(変速が速い)。各段の上限速度は(推定の)ギア比とタイヤ外径から概算
+    phys: {
+      ACC0: 11.6, VMAX: 88.3,               // VMAX 約318km/h。加速は下の表(発進から強烈に、高速でも「まだ伸びる」)。目標: 0→100 約2.9秒 / 0→200 約9.5秒
+      ACC_TABLE: [[0, 12.2], [30, 11.2], [60, 9.5], [100, 7.4], [150, 4.5], [200, 3.2], [250, 2.3], [300, 1.1], [318, 0]],
+      DRAG: .0005, COAST: 1.2, BRAKE_MAX: 12.5, MU_LAT: 1.12,        // 横グリップ約1.1G、最大ブレーキ約1.3G
+      // BRAKE_FADE: 高速ほどブレーキの効きを落としたいときは、ここに [[km/h, 倍率], …] の表を書く(例: 320km/hから約10秒で止まる設定は履歴にある)。今は使わず、全速度で同じ効き
+      WHEELBASE: 2.78, TRACK: 1.6, CG_H: .46, FRONT_STATIC: .54, MIN_TURN_R: 5.7,   // 公式: ホイールベース2,780mm・トレッド1,600mm・最小回転半径5.7m。重量1,720kg。重心高0.46m(セレナ0.68m)と前後配分54:46は推定
+      STEER_SF: [[0, 1], [30, 1], [100, .92], [200, .75], [300, .6]],   // 高速でも舵の効きを大きく落とさない
+      UNDERSTEER: .22, ROLL_DEG_PER_G: .9, REAR_MIN: .35,
+    },
+    hnd: {                                  // セレナと逆: 入力をできるだけ直接、素早く車体へ伝える
+      steerRate: 1.5, steerDecay: 75, yawResp: 13, steerExp: .85, knee: 3.5, driveLat: .22, accelShift: .35, downforce: .0004, lowSpeedPush: .16, yawRearMargin: 1.08, tcb: .7, lowGrip: .88, trailBrake: .25, brakeLat: .6, limitRot: .3, rotDur: .35,
+      rollRate: 14, rollMax: 3, pitchGain: .0014, pitchFreq: 16, pitchZeta: .5, stopKick: .05,
+      thrRamp: .05, thrRelease: .05, thrLinear: true, brakeRamp: .10, brakeRelease: .07, brakeExp: 1.0,
+    },
+    box: {
+      color: 0x0f4fa8, w: 1.895, l: 4.7, h: .6, ch: .47, cl: 1.9, cz: -.25, wing: true, len: 4.7,
+      hit: { off: 1.4, r: .95 }, cam: { dist: 6.4, h: 2.0, look: 1.0 }, eye: [-.42, 1.1, .05],
+      dash: [1.55, .16, .42, 0, .95, .5], wheel: { r: .17, pos: [-.42, .98, .35], rot: -1.0 }, pillar: { dx: .74, y: 1.12, z: .55, h: .5, rot: -.7 }, flame: { x: .5, y: .42, z: -2.4 },
+    },
+    model: null,                            // ← GLBが届いたら { url:'assets/…glb', yaw, length:4.7, hit, cam, eye, cockpit:{…}, tail:{…}, flameY } を書く(serenaの例を参照)
+  },
+  noah: {                                   // トヨタ ノア ハイブリッド(90系・1.8L THS II・FF)。公式: 最小回転半径5.5m。実測(GPS参考): 0-60 4.1s / 0-100 9.76s / 0-180 37.2s、車重約1,630kg、システム出力140ps。これ以外(重心高・グリップ・制御のしきい値など)は推定。3Dモデルが届くまでは箱の仮モデル
+    name: 'トヨタ ノア HV (THS II)', hybrid: true, ready: HYBRIDS_ENABLED,
+    powertrain: {
+      type: 'ths', battery0: .58, cyl: 4, idle: 1000, max: 5200,        // 動力分割式。エンジンは車速と直結せず(遊星ギア)、要求出力に応じて回る
+      chgOn: .45, chgOff: .60,                                          // 残量45%以下で発電を始め、60%まで(トヨタは残量を狭い帯で保つ)
+      mCap: [[0, .62], [60, .55], [100, .42], [140, .30]],              // モーターだけで出せるアクセル量(km/h別)。これを超える踏み増しは、エンジンが回って参加した分だけ増える
+      engSpeed: 58, cruiseOn: 105, hold: 2.2,                           // 58km/h以上で少し踏むとエンジンが入る・105km/h以上は巡航でも常時エンジン・一度かかったら最低2.2秒は動く
+      rpmCurve: [[0, 1000], [.15, 1500], [.35, 2200], [.6, 3300], [.8, 4300], [1, 5200]],   // 要求出力(0〜1) → エンジン回転(eCVTの燃費線)
+      coast: [[0, .35], [10, .5], [30, .65], [70, .55], [130, .4]], coastRamp: .4,   // アクセルオフの回生減速(km/h→m/s²)。穏やか・立ち上がりもゆっくり(踏んだような急減速にしない)
+    },
+    phys: {
+      ACC0: 4.75, VMAX: 50.5, ACC_TABLE: [[0, 4.84], [30, 4.79], [40, 4.27], [50, 3.4], [60, 2.78], [70, 2.36], [80, 2.03], [90, 1.77], [100, 1.54], [110, 1.36], [120, 1.19], [130, 1.04], [140, .91], [150, .78], [160, .66], [170, .55], [178, .43], [181.5, 0]],
+      DRAG: .0009, COAST: 1.2, BRAKE_MAX: 9.0, MU_LAT: .84, WHEELBASE: 2.85, MIN_TURN_R: 5.5, TRACK: 1.51, CG_H: .66, FRONT_STATIC: .58, STEER_SF: STEER_SF_STD, UNDERSTEER: .40, ROLL_DEG_PER_G: 2.7, REAR_MIN: .30,
+    },
+    hnd: {                                  // ミニバンとしては軽快: セレナより舵の立ち上がりが速く、ロールは付くが早く落ち着く
+      steerRate: 1.12, yawResp: 10.5, steerExp: .95, rollRate: 6.5, pitchFreq: 8.5, pitchZeta: .5, thrRamp: .09, thrRelease: .10, coastRamp: .4,
+    },
+    box: {
+      color: 0xdfe3ea, w: 1.73, l: 4.695, h: .5, ch: .58, cl: 1.75, cz: -.25, wing: false, len: 4.695,
+      hit: { off: 1.3, r: .93 }, cam: { dist: 6.4, h: 2.2, look: 1.2 }, eye: [-.4, 1.2, 0],
+      dash: [1.5, .16, .42, 0, .95, .42], wheel: { r: .18, pos: [-.4, .96, .3], rot: -1.0 }, pillar: { dx: .72, y: 1.12, z: .5, h: .58, rot: -.7 }, flame: { x: .5, y: .42, z: -2.3 },
+    },
+    model: null,                            // ← GLBが届いたら serena の例のとおり書く
+  },
+  stepwgn: {                                // ホンダ ステップワゴン(6代目)e:HEV・FF。公式: モーター135kW/315N·m、2.0L直4、最小回転半径は基本5.4m・SPADA PREMIUM LINEなど一部グレードは5.7m(ここでは5.7m=SPADA想定)、車重はe:HEV SPADAで約1,840kg。実測(GPS計測などの条件付き参考値): 0-100 7秒台(ここでは7.5s)。これ以外(重心高・制御のしきい値・直結の回転数・0-60/0-160)は推定。3Dモデルが届くまでは箱の仮モデル
+    name: 'ホンダ ステップワゴン e:HEV', hybrid: true, ready: HYBRIDS_ENABLED,
+    powertrain: {
+      type: 'ehev', battery0: .60, cyl: 4, idle: 950, max: 5500,       // 2モーター式。低〜中速はエンジンが発電してモーターが駆動、高速はエンジン直結(ロックアップ)
+      chgOn: .38, chgOff: .56,
+      evMax: 62, evPedal: .50,                                          // EVモード(エンジン停止)は62km/h未満・アクセル50%未満・残量に余裕があるとき
+      lockOn: 82, lockOff: 68, lockPedal: .62, lockRatio: 17,           // 82km/h以上で軽く踏み続けている(巡航)とエンジン直結へ(68km/h未満・深く踏み続ける・離すと解除)。直結中の回転数 = 車速(km/h) × 17
+      rpmCurve: [[0, 1000], [.25, 1500], [.5, 2500], [.75, 3600], [1, 5000]],   // ハイブリッドモードの発電要求 → エンジン回転(車速とは無関係)
+      coastD: [[0, .3], [10, .45], [30, .6], [70, .55], [130, .45]],     // Dレンジ: 穏やかなアクセルオフ減速(km/h→m/s²)
+      coastB: [[0, .35], [10, .7], [25, 1.1], [70, 1.2], [130, .95]],   // Bレンジ: 回生を強めた減速(Dの約2倍。e-Pedalよりは弱い)
+      coastRamp: .3,
+    },
+    phys: {
+      ACC0: 5.0, VMAX: 50.5, ACC_TABLE: [[0, 5.0], [30, 4.98], [45, 4.85], [50, 4.63], [60, 3.82], [70, 3.24], [80, 2.79], [90, 2.43], [100, 2.12], [110, 1.87], [120, 1.64], [130, 1.43], [140, 1.25], [150, 1.07], [160, .91], [170, .75], [178, .62], [181.5, 0]],
+      DRAG: .0009, COAST: 1.2, BRAKE_MAX: 9.0, MU_LAT: .80, WHEELBASE: 2.89, MIN_TURN_R: 5.7, TRACK: 1.52, CG_H: .66, FRONT_STATIC: .57, STEER_SF: STEER_SF_STD, UNDERSTEER: .42, ROLL_DEG_PER_G: 3.0, REAR_MIN: .30,
+    },
+    hnd: {                                  // 柔らかいが、だらしなくない: 舵は素直、ロール・ピッチは付くが1回で収まる(減衰を強く)
+      steerRate: 1.05, yawResp: 10.2, steerExp: 1, rollRate: 5.2, pitchGain: .0040, pitchFreq: 7, pitchZeta: .62, thrRamp: .10, thrRelease: .10, thrLinear: true, coastRamp: .3,
+    },
+    box: {
+      color: 0x27364d, w: 1.75, l: 4.83, h: .5, ch: .58, cl: 1.8, cz: -.25, wing: false, len: 4.83,
+      hit: { off: 1.35, r: .94 }, cam: { dist: 6.5, h: 2.2, look: 1.2 }, eye: [-.4, 1.2, 0],
+      dash: [1.5, .16, .42, 0, .95, .42], wheel: { r: .18, pos: [-.4, .96, .3], rot: -1.0 }, pillar: { dx: .72, y: 1.12, z: .5, h: .58, rot: -.7 }, flame: { x: .5, y: .42, z: -2.35 },
+    },
+    model: null,
+  },
+};
+const RIGS = {};
+function buildRig(id) {                     // 車1台ぶんの見た目(箱の仮モデル+運転席の内装+ニトロ炎、GLBがあれば読み込んで差し替え)を組み立てる
+  const v = VEHICLES[id], b = v.box;
+  const player = makeCar({ color: b.color, w: b.w, l: b.l, h: b.h, ch: b.ch, cl: b.cl, cz: b.cz, brakeable: true });
+  const group = player.group; group.rotation.order = 'YXZ';
+  player.tailGlows = group.children.filter(c => c.isSprite && c.material.color.getHexString() === 'ff3020');
+  player.headGlows = group.children.filter(c => c.isSprite && c.material.color.getHexString() !== 'ff3020');
+  player.len = b.len; player.hit = { ...b.hit }; player.cam = { ...b.cam }; player.eye = new THREE.Vector3(...b.eye);
+  const bm = new THREE.MeshStandardMaterial({ color: 0x1a1a1c, roughness: .4, metalness: .5 });
+  if (b.wing) group.add(box(b.w * .86, .05, .42, bm, 0, 1.12, -b.l / 2 + .2), box(.06, .3, .1, bm, b.w * .32, .97, -b.l / 2 + .25), box(.06, .3, .1, bm, -b.w * .32, .97, -b.l / 2 + .25));
+  group.add(box(b.dash[0], b.dash[1], b.dash[2], DARK, b.dash[3], b.dash[4], b.dash[5]));                    // ダッシュボード
+  const wPiv = new THREE.Group(); wPiv.position.set(...b.wheel.pos); wPiv.rotation.x = b.wheel.rot;
+  wPiv.add(new THREE.Mesh(new THREE.TorusGeometry(b.wheel.r, .022, 8, 20), DARK)); group.add(wPiv); player.steerWheel = wPiv;
+  for (const sx of [1, -1]) { const p = box(.07, b.pillar.h, .07, DARK, sx * b.pillar.dx, b.pillar.y, b.pillar.z); p.rotation.x = b.pillar.rot; group.add(p); }
+  player.flames = [];
+  for (const sx of [b.flame.x, -b.flame.x]) {
+    const f = new THREE.Mesh(new THREE.ConeGeometry(.16, 1.6, 8).rotateX(-Math.PI / 2).translate(0, 0, -.8), new THREE.MeshBasicMaterial({ color: 0x66aaff, blending: THREE.AdditiveBlending, transparent: true, opacity: .85, depthWrite: false }));
+    f.position.set(sx, b.flame.y, b.flame.z); f.visible = false; group.add(f); player.flames.push(f);
+  }
+  player.exterior = group.children.filter(c => !c.isSprite && !player.flames.includes(c));   // GLBが読めたら隠す箱の仮モデル一式
+  const cp = new THREE.Group(); cp.visible = false; group.add(cp);
+  const m = v.model;
+  if (m) {
+    const ck = m.cockpit;                                      // GLBの車の運転席視点用の内装(箱で代用)
+    cp.add(box(ck.dash[0], ck.dash[1], ck.dash[2], DARK, ck.dash[3], ck.dash[4], ck.dash[5]));
+    const w2 = new THREE.Group(); w2.position.set(...ck.wheel.pos); w2.rotation.x = ck.wheel.rot;
+    w2.add(new THREE.Mesh(new THREE.TorusGeometry(ck.wheel.r, .024, 8, 20), DARK)); cp.add(w2); player.steerWheelModel = w2;
+    for (const sx of [1, -1]) { const p = box(.06, ck.pillar.h, .06, DARK, sx * ck.pillar.dx, ck.pillar.y, ck.pillar.z); p.rotation.x = ck.pillar.rot; cp.add(p); }
+    loadCarModel(m.url, m.yaw, m.length, holder => {
+      group.add(holder); player.model = holder;
+      player.mats = []; holder.traverse(o => { if (o.isMesh) player.mats.push(o.material); }); player.ghostA = 1;
+      player.len = m.length; player.hit = { ...m.hit }; player.cam = { ...m.cam }; player.eye.set(...m.eye); player.steerWheel = player.steerWheelModel;
+      player.tailGlows.forEach((g, i) => g.position.set(i ? -m.tail.x : m.tail.x, m.tail.y, -player.len / 2 - .1));
+      player.headGlows.forEach(g => g.visible = false);          // 前方の光は後ろから見ると縁からはみ出すので消す
+      player.flames.forEach(f => f.position.set(f.position.x, m.flameY, -player.len / 2 - .05));
+      player.exterior.forEach(o => o.visible = false);
+    });
+  }
+  return { player, group, cockpit: cp };
+}
+const battInit = () => VEH.powertrain.type === 'ice' ? 1 : (VEH.powertrain.battery0 ?? .65);
+function setVehicle(id, announce = true) {  // 自車を切り替える(物理・見た目・エンジン音・HUD)
+  const v = VEHICLES[id]; if (!v) return;
+  resetWear(); vehicleId = id; VEH = v; applyPhysics(v.phys); H = { ...HND_DEFAULT, ...(v.hnd || {}) }; setDriveMode(driveMode, false);
+  if (!RIGS[id]) RIGS[id] = buildRig(id);
+  if (carMesh) scene.remove(carMesh);
+  const r = RIGS[id]; PLAYER = r.player; carMesh = r.group; cockpit = r.cockpit; scene.add(carMesh);
+  car.batt = battInit(); car.gen = 0; resetHy(); car.charging = false; car.assist = false; car.dead = false; car.deadT = 0; car.gearIdx = undefined; car.shiftT = 0; car.gear = 1; car.rpm = v.powertrain.idle || 0; car.vx = car.vz = 0;
+  applyEngineSound(); refreshVehicleUI();
+  if (announce && state === 'play') popup(v.name);
+}
+function applyEngineSound() {               // ガソリン車はノコギリ波・矩形波のエンジン音、電動系はモーターの唸り(三角波・正弦波)
+  if (!ac || !eng1) return;
+  const ice = VEH.powertrain.type === 'ice';
+  eng1.type = ice ? 'sawtooth' : 'triangle'; eng2.type = ice ? 'square' : 'sine';
+  const ty = VEH.powertrain.type;               // 発電/駆動エンジンの音色: e-POWERは3気筒の荒い音、THSは4気筒のうなり、e:HEVは静かで丸い音
+  gen1.type = ty === 'ehev' ? 'triangle' : 'sawtooth'; gen2.type = ty === 'ehev' ? 'sawtooth' : ty === 'ths' ? 'triangle' : 'square';
+}
+function refreshVehicleUI() {
+  const ice = VEH.powertrain.type === 'ice';
+  $('rpmLabel').textContent = ice ? 'エンジン回転' : isHy() ? 'システム出力' : 'モーター出力';
+  $('battWrap').style.display = ice ? 'none' : '';
+  const ready = Object.entries(VEHICLES).filter(([, x]) => x.ready), row = $('vehRow');
+  row.style.display = ready.length > 1 ? 'flex' : 'none';
+  row.innerHTML = ready.map(([id, x]) => `<button data-veh="${id}" class="${id === vehicleId ? 'on' : ''}">${x.name}</button>`).join('');
+  row.querySelectorAll('[data-veh]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (state === 'ready' || state === 'over') setVehicle(b.dataset.veh, false); }));
+}
+
+/* ---------- 対向車用のGLBモデル(フロントが作り込まれているモデル) ---------- */
+const SERENA_LEN = 4.7;
+let SERENA = null;
+loadCarModel('assets/serena.glb', Math.PI / 2, SERENA_LEN, holder => { SERENA = holder; traffic.forEach(setVisual); });
+
+/* =====================================================================
+   入力
+   ===================================================================== */
+const keys = { up: 0, down: 0, left: 0, right: 0, space: 0, shift: 0 };
+const KEYMAP = { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'space', ShiftLeft: 'shift', ShiftRight: 'shift' };
+let camMode = 0, muted = false;
+addEventListener('keydown', e => {
+  if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = 1; e.preventDefault(); }
+  if (e.repeat) return;
+  if (e.code === 'KeyC') camMode = 1 - camMode;
+  if ((e.code === 'Digit1' || e.code === 'Numpad1') && (state === 'ready' || state === 'over')) setCourse('public');
+  if ((e.code === 'Digit2' || e.code === 'Numpad2') && (state === 'ready' || state === 'over')) setCourse('tsukuba');
+  if ((e.code === 'Digit3' || e.code === 'Numpad3') && (state === 'ready' || state === 'over')) setCourse('straight');
+  if ((e.code === 'Digit4' || e.code === 'Numpad4') && (state === 'ready' || state === 'over')) setCourse('city');
+  if ((e.code === 'Digit5' || e.code === 'Numpad5') && (state === 'ready' || state === 'over')) setCourse('smash');
+  if (e.code === 'KeyT' && course === 'city' && (state === 'play' || state === 'ready')) { city.warpI = (city.warpI + 1) % CITY_WARPS.length; cityPlaceCar(CITY_WARPS[city.warpI]); popup('ワープ: ' + CITY_WARPS[city.warpI].name); }
+  if (e.code === 'KeyV' && (state === 'ready' || state === 'over')) { const ids = Object.keys(VEHICLES).filter(k => VEHICLES[k].ready); if (ids.length > 1) setVehicle(ids[(ids.indexOf(vehicleId) + 1) % ids.length], false); }
+  if (state === 'ready') {                                   // スタート画面はWASD(と矢印キー)だけで操作できる: A/D=コース、W/S=車種
+    const dx = (e.code === 'KeyD' || e.code === 'ArrowRight') - (e.code === 'KeyA' || e.code === 'ArrowLeft'), dy = (e.code === 'KeyS' || e.code === 'ArrowDown') - (e.code === 'KeyW' || e.code === 'ArrowUp');
+    if (dx) { const cs = [...document.querySelectorAll('[data-course]')].map(b => b.dataset.course); setCourse(cs[(cs.indexOf(course) + dx + cs.length) % cs.length]); }
+    if (dy) { const ids = Object.keys(VEHICLES).filter(k => VEHICLES[k].ready); if (ids.length > 1) setVehicle(ids[(ids.indexOf(vehicleId) + dy + ids.length) % ids.length], false); }
+  }
+  if (e.code === 'KeyQ') setDriveMode(driveMode === 'eco' ? 'normal' : driveMode === 'normal' ? 'sport' : 'eco');
+  if (e.code === 'KeyE' && hasEPedal()) { ePedal = !ePedal; popup(ePedal ? 'e-Pedal ON' : 'e-Pedal OFF'); }
+  if (e.code === 'KeyB' && VEH.powertrain.coastB) { decelSel = decelSel === 'D' ? 'B' : 'D'; popup('シフト ' + decelSel + (decelSel === 'B' ? '(回生を強める)' : '(穏やかな減速)')); }
+  if (e.code === 'KeyM') { muted = !muted; if (master) master.gain.value = muted ? 0 : .5; }
+  if (e.code === 'Enter' || (e.code === 'Space' && state === 'ready')) { if (state === 'ready') startGame(); else if (state === 'over') restart(); }
+  if (e.code === 'KeyR') { if (state === 'over') restart(); else if (state === 'play') recover(); }
+});
+addEventListener('keyup', e => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = 0; });
+addEventListener('blur', () => { for (const k in keys) keys[k] = 0; });
+addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-course],[data-mode],[data-veh]')) return; if (state === 'ready') startGame(); else if (state === 'over' && overT > 1.2) restart(); });
+
+/* =====================================================================
+   サウンド(WebAudioでその場合成)
+   ===================================================================== */
+let ac, master, eng1, eng2, engLp, engGain, gen1, gen2, genLp, genGain, windGain, tireGain, nitroGain, noiseBuf;
+function initAudio() {
+  if (ac) return;
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  master = ac.createGain(); master.gain.value = muted ? 0 : .5; master.connect(ac.destination);
+  noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
+  const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  engLp = ac.createBiquadFilter(); engLp.type = 'lowpass'; engLp.frequency.value = 700;
+  engGain = ac.createGain(); engGain.gain.value = 0;
+  eng1 = ac.createOscillator(); eng1.type = 'triangle'; eng2 = ac.createOscillator(); eng2.type = 'sine';
+  const g1 = ac.createGain(); g1.gain.value = .5; const g2 = ac.createGain(); g2.gain.value = .22;
+  eng1.connect(g1).connect(engLp); eng2.connect(g2).connect(engLp); engLp.connect(engGain).connect(master);
+  eng1.start(); eng2.start();
+  // 発電用エンジン(シリーズ式): 車速とは切り離して鳴る
+  genLp = ac.createBiquadFilter(); genLp.type = 'lowpass'; genLp.frequency.value = 600;
+  genGain = ac.createGain(); genGain.gain.value = 0;
+  gen1 = ac.createOscillator(); gen1.type = 'sawtooth'; gen2 = ac.createOscillator(); gen2.type = 'square';
+  const gg1 = ac.createGain(); gg1.gain.value = .55; const gg2 = ac.createGain(); gg2.gain.value = .2;
+  gen1.connect(gg1).connect(genLp); gen2.connect(gg2).connect(genLp); genLp.connect(genGain).connect(master);
+  gen1.start(); gen2.start();
+  setTimeout(applyEngineSound, 0);
+  const noise = (type, freq, q) => {
+    const s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = true;
+    const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+    const g = ac.createGain(); g.gain.value = 0; s.connect(f).connect(g).connect(master); s.start(); return g;
+  };
+  windGain = noise('bandpass', 700, .6); tireGain = noise('bandpass', 1900, 3); nitroGain = noise('highpass', 1800, .5);
+}
+function sfxCrash(power) {
+  if (!ac) return;
+  const s = ac.createBufferSource(); s.buffer = noiseBuf;
+  const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 500 + power * 900;
+  const g = ac.createGain(); const t = ac.currentTime;
+  g.gain.setValueAtTime(clamp(.3 + power * .7, 0, 1.2), t); g.gain.exponentialRampToValueAtTime(.001, t + .55);
+  s.connect(f).connect(g).connect(master); s.start(t); s.stop(t + .6);
+}
+function sfxPass() {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = 'sine'; o.frequency.setValueAtTime(700, t); o.frequency.exponentialRampToValueAtTime(1500, t + .12);
+  g.gain.setValueAtTime(.18, t); g.gain.exponentialRampToValueAtTime(.001, t + .2);
+  o.connect(g).connect(master); o.start(t); o.stop(t + .22);
+}
+function updateAudio(thr, kmh, slip, nitroOn, scrape) {
+  if (!ac) return;
+  const t = ac.currentTime, pt = VEH.powertrain;
+  if (pt.type === 'ice') {                                        // ガソリン車: 回転数から爆発の周波数を作る
+    const ef = car.rpm / 60 * (pt.cyl / 2);
+    eng1.frequency.setTargetAtTime(ef, t, .03); eng2.frequency.setTargetAtTime(ef * .5, t, .03);
+    engLp.frequency.setTargetAtTime(500 + thr * 1500 + car.rpm * .15, t, .05);
+    engGain.gain.setTargetAtTime(state === 'over' ? .03 : .14 + thr * .14, t, .05);
+    genGain.gain.setTargetAtTime(0, t, .1);
+    windGain.gain.setTargetAtTime(clamp((kmh / 250) ** 2 * .5, 0, .5), t, .1);
+    tireGain.gain.setTargetAtTime(clamp(Math.max(slip - 2.5, 0) * .05, 0, .3) + (scrape ? .22 : 0) + (car.tcb || 0) * .09, t, .05);
+    nitroGain.gain.setTargetAtTime(nitroOn ? .2 : 0, t, .05);
+    return;
+  }
+  if (pt.type === 'ths' || pt.type === 'ehev') {                  // THS / e:HEV: モーターの唸り(車速に比例)と、エンジン音(エンジン制御の回転数=車速と同期しない。e:HEVの直結中だけ車速に連動)
+    const eh = pt.type === 'ehev', lk = car.lock || 0, rpm = car.engRpm, load = clamp((rpm - pt.idle) / (pt.max - pt.idle), 0, 1);
+    const f = eh ? 95 + kmh * 6.2 : 80 + kmh * 5.0;
+    eng1.frequency.setTargetAtTime(f, t, .03); eng2.frequency.setTargetAtTime(f * 1.5, t, .03);
+    engLp.frequency.setTargetAtTime(900 + thr * 1800 + kmh * 6, t, .05);
+    engGain.gain.setTargetAtTime(state === 'over' ? .02 : .03 + (Math.min(kmh / 40, 1) * .08 + thr * .06) * M.motorVol * (eh ? 1 - .85 * lk : car.engOn ? .8 : 1), t, .05);
+    const gf = rpm / 60 * (pt.cyl / 2);
+    gen1.frequency.setTargetAtTime(Math.max(gf, 1), t, .05); gen2.frequency.setTargetAtTime(Math.max(gf * .5, 1), t, .05);
+    genLp.frequency.setTargetAtTime(eh ? 380 + rpm * .22 + lk * 500 : 500 + rpm * .35, t, .08);
+    genGain.gain.setTargetAtTime(state === 'over' || rpm < 300 ? 0 : eh ? .03 + load * .10 + lk * .05 : .04 + load * .16, t, .1);
+    windGain.gain.setTargetAtTime(clamp((kmh / 250) ** 2 * .5, 0, .5), t, .1);
+    tireGain.gain.setTargetAtTime(clamp(Math.max(slip - 2.5, 0) * .05, 0, .3) + (scrape ? .22 : 0) + (car.tcb || 0) * .09, t, .05);
+    nitroGain.gain.setTargetAtTime(nitroOn ? .2 : 0, t, .05);
+    return;
+  }
+  const f = 80 + kmh * 5.5;                                      // モーターの唸り: 速度に比例して連続的に上がる(変速の途切れなし)
+  eng1.frequency.setTargetAtTime(f, t, .03); eng2.frequency.setTargetAtTime(f * 1.5, t, .03);
+  engLp.frequency.setTargetAtTime(900 + thr * 1800 + kmh * 6, t, .05);
+  engGain.gain.setTargetAtTime(state === 'over' ? .02 : .03 + (Math.min(kmh / 40, 1) * .09 + thr * .07) * M.motorVol * (car.dead ? 0 : 1), t, .05);   // 停車中はほぼ無音(EV)
+  const rpm = genRpm(car.gen), gf = rpm / 60 * 1.5;          // 3気筒: 1回転あたり1.5回爆発
+  gen1.frequency.setTargetAtTime(gf, t, .06); gen2.frequency.setTargetAtTime(gf * .5, t, .06);
+  genLp.frequency.setTargetAtTime(450 + (rpm - 900) / 3600 * 1800, t, .08);
+  genGain.gain.setTargetAtTime(car.gen > .02 ? .05 + car.gen * .17 : 0, t, .12);
+  windGain.gain.setTargetAtTime(clamp((kmh / 250) ** 2 * .5, 0, .5), t, .1);
+  tireGain.gain.setTargetAtTime(clamp(Math.max(slip - 2.5, 0) * .05, 0, .3) + (scrape ? .22 : 0) + (car.tcb || 0) * .09, t, .05);
+  nitroGain.gain.setTargetAtTime(nitroOn ? .2 : 0, t, .05);
+}
+
+/* =====================================================================
+   パーティクル(タイヤの煙・火花)
+   ===================================================================== */
+const parts = [];
+for (let i = 0; i < 200; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false }));
+  s.visible = false; scene.add(s); parts.push({ s, life: 0, max: 1, vx: 0, vy: 0, vz: 0, size: 1, grow: 0, g: 0, add: false });
+}
+let partI = 0;
+function emit(x, y, z, vx, vy, vz, life, size, grow, color, add, g = 0) {
+  const p = parts[partI++ % parts.length];
+  p.s.position.set(x, y, z); p.vx = vx; p.vy = vy; p.vz = vz; p.life = p.max = life; p.size = size; p.grow = grow; p.g = g; p.add = add;
+  p.s.material.color.set(color); p.s.material.blending = add ? THREE.AdditiveBlending : THREE.NormalBlending; p.s.visible = true;
+}
+function updateParts(dt) {
+  for (const p of parts) {
+    if (p.life <= 0) continue;
+    p.life -= dt; if (p.life <= 0) { p.s.visible = false; continue; }
+    const f = p.life / p.max;
+    p.vy -= p.g * dt; p.s.position.x += p.vx * dt; p.s.position.y += p.vy * dt; p.s.position.z += p.vz * dt;
+    const sc = p.size + p.grow * (1 - f); p.s.scale.set(sc, sc, 1);
+    p.s.material.opacity = p.add ? f : f * .45;
+  }
+}
+
+/* =====================================================================
+   破壊表現: ガードレールの破片・倒れる木・コース外の走行
+   ===================================================================== */
+const geoRailPiece = new THREE.BoxGeometry(.08, .32, 2.4), geoWoodPiece = new THREE.CylinderGeometry(.16, .2, 1.4, 6);
+const matWood = new THREE.MeshLambertMaterial({ color: 0x5a3f2a });
+const debris = [], falling = [], zeroM = new THREE.Matrix4().makeScale(0, 0, 0);
+const BREAK_V = 14;                         // ガードレールを突き破る速さ(壁に向かう成分・m/s。約50km/h。以前は9=約32km/hで、やわすぎた)
+const RAIL_OUT = ROAD_HALF + .95;           // コースの外側から見たガードレールに当たる位置(車体中心)
+const DEBRIS_MAX = 260;                       // 破片の同時数(破壊ステージで多く壊すので多め。足りなければいちばん古いものを再利用)
+const DEB = {};                               // 破片の種類 → [形, 素材]。破壊ステージの障害物ぶんは smash のところで追加
+function spawnDebris(kind, x, y, z, vx, vy, vz, floorY, yaw = 0) {
+  let d = debris.find(o => !o.mesh.visible);
+  if (!d && debris.length < DEBRIS_MAX) { const m = new THREE.Mesh(geoRailPiece, matRail); m.visible = false; scene.add(m); d = { mesh: m }; debris.push(d); }
+  if (!d) d = debris.reduce((a, b) => (b.life < a.life ? b : a));
+  const m = d.mesh, dk = DEB[kind];
+  m.geometry = dk ? dk[0] : kind === 'wood' ? geoWoodPiece : kind === 'post' ? geoPost : geoRailPiece;
+  m.material = dk ? dk[1] : kind === 'wood' ? matWood : kind === 'post' ? matPost : matRail;
+  m.position.set(x, y, z); m.rotation.set(rnd(0, 3), yaw + rnd(-.4, .4), rnd(0, 3)); m.scale.setScalar(1); m.visible = true;
+  Object.assign(d, { vx, vy, vz, wx: rnd(-8, 8), wy: rnd(-5, 5), wz: rnd(-8, 8), life: rnd(3, 5), floorY });
+}
+function spawnFall(tr, fx, fz, color) {     // 倒れていく木(根元を軸に倒れる)
+  const g = new THREE.Group(); g.position.set(tr.x, tr.y, tr.z); g.scale.setScalar(tr.sc);
+  const trunk = new THREE.Mesh(geoTrunk, matTrunk), crown = new THREE.Mesh(geoCrown, new THREE.MeshLambertMaterial({ color })); crown.position.y = 1.4;
+  g.add(trunk, crown); scene.add(g); falling.push({ g, ax: new THREE.Vector3(fz, 0, -fx), t: 0, mat: crown.material });
+}
+function updateDebris(dt) {
+  for (const d of debris) {
+    if (!d.mesh.visible) continue; const m = d.mesh;
+    d.vy -= 14 * dt; m.position.x += d.vx * dt; m.position.y += d.vy * dt; m.position.z += d.vz * dt;
+    m.rotation.x += d.wx * dt; m.rotation.y += d.wy * dt; m.rotation.z += d.wz * dt;
+    if (m.position.y < d.floorY + .12) { m.position.y = d.floorY + .12; d.vy *= -.28; d.vx *= .65; d.vz *= .65; d.wx *= .6; d.wy *= .6; d.wz *= .6; if (Math.abs(d.vy) < 1) d.vy = 0; }
+    d.life -= dt; m.scale.setScalar(d.life < .5 ? Math.max(.01, d.life / .5) : 1); if (d.life <= 0) m.visible = false;
+  }
+  for (let i = falling.length - 1; i >= 0; i--) {
+    const f = falling[i]; f.t += dt;
+    f.g.quaternion.setFromAxisAngle(f.ax, Math.min(1.5, 1.6 * f.t * f.t));
+    if (f.t > 3) { scene.remove(f.g); f.mat.dispose(); falling.splice(i, 1); }
+  }
+}
+function breakRail(side, nCar, px, py, pz, vx, vz, power) {   // ガードレール1区画(12m)を壊す
+  const key = railKey(side, nCar); if (brokenRails.has(key)) return; brokenRails.add(key);
+  const nn = nnOf(nCar), segStart = Math.floor(nn / RAIL_SEG) * RAIL_SEG, off = nCar - nn, n0s = segStart + off, n1s = n0s + RAIL_SEG;
+  for (const ci of new Set([Math.floor(n0s / CHN), Math.floor((n1s - 1) / CHN)])) { damagedChunks.add(ci); rebuildChunk(ci); }
+  for (let n = n0s; n <= n1s; n += 2) {                          // 破片: 車の進む向きに飛び散る
+    ensure(n + 1); const h = PH[n], Lx = Math.cos(h) * side, Lz = -Math.sin(h) * side, y = PY[n];
+    spawnDebris('rail', PX[n] + Lx * ROAD_HALF, y + .5, PZ[n] + Lz * ROAD_HALF, vx * .55 + Lx * rnd(1, 5) + rnd(-2, 2), rnd(3, 7 + power * 4), vz * .55 + Lz * rnd(1, 5) + rnd(-2, 2), y, h);
+    if ((n - n0s) % 4 === 0) spawnDebris('post', PX[n] + Lx * (ROAD_HALF + .12), y + .3, PZ[n] + Lz * (ROAD_HALF + .12), vx * .5 + rnd(-2, 2), rnd(3, 6), vz * .5 + rnd(-2, 2), y);
+  }
+  for (let i = 0; i < 24; i++) emit(px, py + .5, pz, vx * .3 + rnd(-6, 6), rnd(1, 7), vz * .3 + rnd(-6, 6), rnd(.3, .8), rnd(.15, .35), 0, 0xffb040, true, 12);
+  sfxCrash(1); shake = Math.min(1.5, shake + .8); $('flash').style.opacity = .5; popup('ガードレール破壊!', 'close');
+}
+function smashTree(ch, tr, vx, vz, power) {  // 木をなぎ倒す
+  tr.alive = false; ch.trunks.setMatrixAt(tr.ti, zeroM); ch.crowns.setMatrixAt(tr.ti, zeroM);
+  ch.trunks.instanceMatrix.needsUpdate = true; ch.crowns.instanceMatrix.needsUpdate = true;
+  const ci = [...chunks.entries()].find(([, v]) => v === ch)[0]; treeGone.add(ci + ':' + tr.ti); damagedChunks.add(ci);
+  const sp = Math.hypot(vx, vz) || 1, col = new THREE.Color(); ch.crowns.getColorAt(tr.ti, col);
+  spawnFall(tr, vx / sp, vz / sp, col.getHex());
+  for (let i = 0; i < 5; i++) spawnDebris('wood', tr.x + rnd(-.3, .3), tr.y + rnd(.3, 1.6) * tr.sc, tr.z + rnd(-.3, .3), vx * .5 + rnd(-3, 3), rnd(2, 6), vz * .5 + rnd(-3, 3), tr.y);
+  for (let i = 0; i < 16; i++) emit(tr.x + rnd(-1, 1), tr.y + rnd(2, 5) * tr.sc, tr.z + rnd(-1, 1), rnd(-3, 3), rnd(0, 4), rnd(-3, 3), rnd(.6, 1.2), rnd(.25, .5), 0, 0x5f8a3a, false, 4);
+  sfxCrash(clamp(.4 + power * .3, 0, 1)); shake = Math.min(1.5, shake + .35);
+}
+function collideTrees(c, dt) {                // 木との衝突: 遅ければ跳ね返され、速ければ折れる
+  const Fx = Math.sin(c.h), Fz = Math.cos(c.h), R = PLAYER.hit.r;
+  for (const ch of chunks.values()) {
+    if (!ch.trees) continue;
+    for (const tr of ch.trees) {
+      if (!tr.alive) continue;
+      const dx0 = tr.x - c.x, dz0 = tr.z - c.z; if (dx0 * dx0 + dz0 * dz0 > 49) continue;
+      const rt = .3 * tr.sc;
+      for (const off of [PLAYER.hit.off, -PLAYER.hit.off, 0]) {
+        const px = c.x + Fx * off, pz = c.z + Fz * off, dx = px - tr.x, dz = pz - tr.z, d = Math.hypot(dx, dz);
+        if (d >= R + rt) continue;
+        const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0, vn = -(c.vx * nx + c.vz * nz);   // 木に向かう速さ
+        if (vn <= 0) continue;
+        crashFx(px - nx * R, c.y + .6, pz - nz * R, nx, nz, vn, true);
+        if (vn >= 9 + 5 * Math.max(0, tr.sc - 1)) {                    // 折れる(太い木ほど高い速度が必要)
+          smashTree(ch, tr, c.vx, c.vz, vn / 20); damage(3 + vn * .5); c.vx *= .9; c.vz *= .9; popup('木をなぎ倒した!');
+        } else {                                                        // 折れない: 跳ね返される
+          c.x += nx * (R + rt - d); c.z += nz * (R + rt - d);
+          c.vx += nx * vn * 1.3; c.vz += nz * vn * 1.3;
+          if (vn > 2 && railCool <= 0) { railCool = .3; damage(vn * .9); shake = Math.min(1.2, shake + vn / 20); sfxCrash(clamp(vn / 15, 0, 1)); }
+        }
+        break;
+      }
+    }
+  }
+}
+function resetDestruction() {                 // 壊れたガードレール・木をもとに戻す(リスタート時)
+  brokenRails.clear(); treeGone.clear(); smashReset();
+  for (const ci of damagedChunks) rebuildChunk(ci);
+  damagedChunks.clear();
+  debris.forEach(d => d.mesh.visible = false);
+  for (const f of falling) { scene.remove(f.g); f.mat.dispose(); } falling.length = 0;
+}
+
+
+
+/* =====================================================================
+   衝突の破片と、裏でためる「傷み」(%)→ 一定を超えたら出火
+   ・強くぶつかるとバンパーやパネルが外れて飛ぶ(車体そのものは変形しない)
+   ・傷みは画面には出さず、ぶつかるたびに裏でたまる。FIRE_AT を超えると、ぶつけた場所から出火する
+   ・燃えても走り続けられる(ダメージなしの設定のまま)。リスタート・コース切り替え・車種切り替えで直る
+   ===================================================================== */
+const FIRE_AT = 60;                                  // 傷み(%)がこれを超えたら出火
+const geoBumper = new THREE.BoxGeometry(1.5, .22, .3), geoPanel = new THREE.BoxGeometry(.7, .05, .5);
+DEB.bumper = [geoBumper, new THREE.MeshLambertMaterial({ color: 0x1c1c1e })]; DEB.panel = [geoPanel, new THREE.MeshLambertMaterial({ color: 0xa8acb4 })];
+let wear = 0, fireHot = null, fireAcc = 0, smokeAcc = 0, fxTP = 0, fxTO = 0;
+const tmpV = new THREE.Vector3();
+function crashFx(x, y, z, dx, dz, power, player) {   // (x,y,z): 衝突位置  (dx,dz): 車の中へ向かう衝撃の向き  power: 強さ(だいたい衝突の速さ m/s)
+  if (power < 5) return;
+  const now = performance.now();
+  if (player) { if (now - fxTP < 200) return; fxTP = now; wear += power * .8; }        // 傷みは自車だけ(表示なし)
+  else { if (now - fxTO < 120) return; fxTO = now; }
+  if (power < 8) return;
+  const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
+  if (player && carMesh && (!fireHot || power >= 10)) { carMesh.updateWorldMatrix(true, false); fireHot = carMesh.worldToLocal(new THREE.Vector3(x, y + .3, z)); }   // 出火する場所はいちばん強くぶつけたところ
+  const vx = dx * power * .5, vz = dz * power * .5;
+  spawnDebris('bumper', x, y, z, vx + rnd(-3, 3), rnd(3, 6), vz + rnd(-3, 3), 0, rnd(0, 6));
+  for (let i = 0; i < (power > 16 ? 3 : 1); i++) spawnDebris('panel', x + rnd(-.3, .3), y + rnd(0, .5), z + rnd(-.3, .3), vx + rnd(-5, 5), rnd(3, 8), vz + rnd(-5, 5), 0, rnd(0, 6));
+  for (let i = 0; i < 5; i++) emit(x, y + .3, z, rnd(-4, 4), rnd(1, 4), rnd(-4, 4), rnd(.3, .6), rnd(.1, .2), 0, 0xbfe8ff, true, 12);   // ガラスの破片のきらめき
+}
+function resetWear() { wear = 0; fireHot = null; fireAcc = smokeAcc = 0; }
+function updateFire(dt) {                            // 出火中の炎と煙(粒は控えめ)
+  if (wear < FIRE_AT || !carMesh || !PLAYER) return;
+  const f = clamp((wear - FIRE_AT) / 60, 0, 1);
+  carMesh.updateWorldMatrix(true, false);
+  const p = carMesh.localToWorld(tmpV.copy(fireHot || tmpV.set(0, .8, (PLAYER.len || 4.7) * .3)));
+  smokeAcc += (6 + 6 * f) * dt; fireAcc += (16 + 14 * f) * dt;
+  while (smokeAcc >= 1) { smokeAcc--; emit(p.x + rnd(-.2, .2), p.y + .2, p.z + rnd(-.2, .2), car.vx * .85 + rnd(-.5, .5), rnd(1.2, 2.4), car.vz * .85 + rnd(-.5, .5), rnd(1.1, 1.9), rnd(.5, .8), 2.2, 0x303030, false, -.5); }
+  while (fireAcc >= 1) { fireAcc--; emit(p.x + rnd(-.25, .25), p.y + rnd(0, .25), p.z + rnd(-.25, .25), car.vx * .9 + rnd(-.6, .6), rnd(1.5, 3.2), car.vz * .9 + rnd(-.6, .6), rnd(.3, .6), rnd(.5, .9), .5, Math.random() < .5 ? 0xff5a14 : 0xffb030, true, -3); }
+}
+
+/* =====================================================================
+   破壊ステージ(smash): 障害物を置きまくった直線を走り抜けて、壊すだけ。タイムアップなし
+   ・木箱 / タル / コーン / コンクリートブロック(重い) / 地雷(踏むと10m吹き飛ぶ)。接触すると必ず壊れて、軽く減速するだけで止まらない
+   ・連続で壊すほどコンボ倍率(2.5秒以内につなぐ)。スタート付近(200mまで)は何もなし
+   ===================================================================== */
+const SMASH_TIME = 90;
+const OBS = {                                            // r: 当たり半径(m) pts: 得点 slow: 壊すときの減速(m/s)
+  crate:  { r: .62, pts: 10, slow: .45, cols: [0xb98748, 0xa87a3f, 0xc9985a, 0x9c6f39] },
+  barrel: { r: .42, pts: 15, slow: .3,  cols: [0xd23a2a, 0x2a6ad2, 0xe0b52a, 0x3aa24a] },
+  cone:   { r: .30, pts: 5,  slow: .12, cols: [0xff7a1a, 0xff8f2e] },
+  block:  { r: .85, pts: 40, slow: 1.4, cols: [0x9a9a96, 0x8b8b88, 0xa8a8a4] },
+  mine:   { r: .55, pts: 100, slow: 0, cols: [0x3a3f2e, 0x4a4032, 0x2f3a3a] },     // 地雷: 踏むと爆発して車が吹き飛ぶ(破壊ステージだけ上下の動きがある)
+};
+const geoObs = { crate: new THREE.BoxGeometry(1, 1, 1).translate(0, .5, 0), barrel: new THREE.CylinderGeometry(.36, .36, .95, 12).translate(0, .475, 0), cone: new THREE.ConeGeometry(.26, .75, 10).translate(0, .375, 0), block: new THREE.BoxGeometry(1.7, .9, .8).translate(0, .45, 0), mine: new THREE.CylinderGeometry(.48, .55, .14, 16).translate(0, .07, 0) };
+const geoChip = new THREE.BoxGeometry(.3, .3, .3);
+const matObs = new THREE.MeshLambertMaterial({ color: 0xffffff });          // 色は個体ごと(instanceColor)
+for (const k of Object.keys(OBS)) { const m = new THREE.MeshLambertMaterial({ color: OBS[k].cols[0] }); DEB[k] = [geoObs[k], m]; DEB['chip_' + k] = [geoChip, m]; }
+const smashGone = new Set();                             // 壊した障害物(チャンク番号:通し番号)
+const smashState = { t: SMASH_TIME, count: 0, best: 0, pts: 0, sfxT: 0, milestone: 0 };
+function smashReset() { smashGone.clear(); Object.assign(smashState, { t: SMASH_TIME, count: 0, pts: 0, sfxT: 0, milestone: 0 }); }
+const smashHudText = () => `SMASH  ${smashState.count} 個\nCOMBO  ×${Math.max(1, combo)}`;
+function buildSmashObstacles(ci, grp) {
+  const rng = mulberry32(ci * 104729 + 31), list = [], s0 = ci * CHL;
+  const add = (type, d, s, y = 0, rot = 0) => list.push({ type, d: clamp(d, -7.3, 7.3), s, y, rot });
+  for (let z = 0; z < 4; z++) {
+    const sz = s0 + z * 30 + 6 + rng() * 10;
+    if (sz < 200) continue;
+    const pat = Math.floor(rng() * 7), d0 = (rng() - .5) * 8;
+    if (pat === 0) { for (let L = 0; L < 4; L++) for (let i = 0; i < 4 - L; i++) for (let j = 0; j < 3; j++) add('crate', d0 + (i - (3 - L) / 2) * 1.05, sz + (j - 1) * 1.05, L); }        // 木箱のピラミッド
+    else if (pat === 1) { for (let d = -6.8; d <= 6.9; d += 1.05) for (let L = 0; L < 3; L++) add('crate', d, sz, L); }                                                      // 道いっぱいの木箱の壁
+    else if (pat === 2) { for (let i = 0; i < 28; i++) add('barrel', (rng() - .5) * 14.5, sz + rng() * 24 - 8, 0, rng() * 6); }                                                // タルの散らばり
+    else if (pat === 3) { for (let i = 0; i < 12; i++) { const a = Math.sin(i * .9 + rng()) * 6; add('cone', a, sz + i * 1.9 - 10); add('cone', a + 1.6, sz + i * 1.9 - 10); } }  // コーンのスラローム
+    else if (pat === 4) { for (let r = 0; r < 3; r++) for (let i = 0; i < 3; i++) add('block', (i - 1) * 4.6 + (r % 2) * 2.3, sz + r * 5, 0, r % 2 ? 0 : .12); }              // コンクリートブロック
+    else if (pat === 5) { for (let i = 0; i < 5; i++) { const d = -6 + i * 3 + rng() * 1.2, sN = sz + rng() * 8; for (let L = 0; L < 5; L++) add('crate', d, sN, L, L * .15); } }                  // 5段の木箱タワー
+    else { for (let i = 0; i < 9; i++) add('mine', (rng() - .5) * 14, sz + rng() * 22 - 6); for (let i = 0; i < 6; i++) add('barrel', (rng() - .5) * 14, sz + rng() * 22 - 6, 0, rng() * 6); }   // 地雷原(踏むと吹き飛ぶ。タルもまざる)
+  }
+  const meshes = {}, items = [], per = {};
+  for (const o of list) per[o.type] = (per[o.type] || 0) + 1;
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), S = new THREE.Vector3(), col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
+  const idx = {};
+  for (const type of Object.keys(per)) { const m = new THREE.InstancedMesh(geoObs[type], matObs, per[type]); meshes[type] = m; idx[type] = 0; grp.add(m); }
+  list.forEach((o, k) => {
+    const c = centerAt(o.s), x = c.x + Math.cos(c.h) * o.d, z = c.z - Math.sin(c.h) * o.d, y = c.y + o.y, i = idx[o.type]++, key = ci + ':' + k, alive = !smashGone.has(key);
+    P.set(x, y, z); Q.setFromAxisAngle(up, c.h + o.rot); S.setScalar(alive ? 1 : 0);
+    const m = meshes[o.type]; m.setMatrixAt(i, M.compose(P, Q, S));
+    const cs = OBS[o.type].cols; col.setHex(cs[Math.floor(rng() * cs.length)]); m.setColorAt(i, col);
+    items.push({ type: o.type, x, y, z, i, key, alive, yaw: c.h + o.rot });
+  });
+  for (const m of Object.values(meshes)) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  return { meshes, items };
+}
+function smashFinish() {
+  const S = smashState; state = 'over'; overT = 2; S.best = Math.max(S.best, S.count);
+  showOver('タイムアップ!', `破壊 <b>${S.count}</b> 個　スコア <b>${Math.round(score)}</b><br>ベスト <b>${S.best}</b> 個　最高 <b>${Math.round(maxKmh)}</b> km/h`);
+}
+function smashStep(dt) {
+  const S = smashState, c = car;
+  if (state !== 'play') return;
+  S.sfxT -= dt;                                                                    // タイムアップなし(いつまでも壊し続けられる)
+  airStep(c, dt);                                                                  // 地雷で吹き飛んでいる間の上下の動き
+  if ((c.hop || 0) > 2.2) return;                                                  // 高く飛んでいる間は障害物に当たらない
+  const v = Math.hypot(c.vx, c.vz), Fx = Math.sin(c.h), Fz = Math.cos(c.h), R = PLAYER.hit.r, near = 10 + v * dt, ci0 = Math.floor(c.s / CHL);
+  for (let ci = ci0 - 1; ci <= ci0 + 1; ci++) {
+    const ch = chunks.get(ci); if (!ch || !ch.smash) continue;
+    for (const o of ch.smash.items) {
+      if (!o.alive) continue;
+      const dx0 = o.x - c.x, dz0 = o.z - c.z; if (dx0 * dx0 + dz0 * dz0 > near * near) continue;
+      const ob = OBS[o.type]; let hit = false;
+      for (const k of [0, .5, 1]) {                                            // 1フレームで進んだ道のりも調べる(高速で素通りしない)
+        const bx = c.x - c.vx * dt * (1 - k), bz = c.z - c.vz * dt * (1 - k);
+        for (const off of [PLAYER.hit.off, 0, -PLAYER.hit.off]) { const dx = bx + Fx * off - o.x, dz = bz + Fz * off - o.z, rr = R + ob.r; if (dx * dx + dz * dz < rr * rr) { hit = true; break; } }
+        if (hit) break;
+      }
+      if (hit) { if (o.type === 'mine') { if (!c.air) mineBlast(ch, ci, o, v); } else smashObstacle(ch, ci, o, v); }
+    }
+  }
+}
+function smashObstacle(ch, ci, o, v, blast) {                    // blast: 爆風で壊すとき { x, z }(爆心)。車の減速なし・破片は爆心から放射状に飛ぶ
+  const S = smashState, c = car, ob = OBS[o.type], m = ch.smash.meshes[o.type];
+  o.alive = false; m.setMatrixAt(o.i, zeroM); m.instanceMatrix.needsUpdate = true; smashGone.add(o.key); damagedChunks.add(ci);
+  const sp = v + 1, fy = 0;
+  let vx, vz, up = rnd(4, 9) * (1 + v / 45);
+  if (blast) { const dx = o.x - blast.x, dz = o.z - blast.z, d = Math.hypot(dx, dz) || 1, f = rnd(6, 13) * (1.2 - Math.min(1, d / 9) * .6); vx = dx / d * f; vz = dz / d * f; up = rnd(7, 15); }
+  else { vx = c.vx * rnd(.55, 1); vz = c.vz * rnd(.55, 1); }
+  spawnDebris(o.type, o.x, o.y + .2, o.z, vx + rnd(-4, 4), up, vz + rnd(-4, 4), fy, o.yaw);
+  for (let i = 0; i < 2; i++) spawnDebris('chip_' + o.type, o.x + rnd(-.3, .3), o.y + rnd(.2, .8), o.z + rnd(-.3, .3), vx * rnd(.7, 1.3) + rnd(-6, 6), up * rnd(.6, 1.2), vz * rnd(.7, 1.3) + rnd(-6, 6), fy);
+  for (let i = 0; i < 3; i++) emit(o.x, o.y + .6, o.z, (blast ? vx : c.vx) * .3 + rnd(-5, 5), rnd(1, 6), (blast ? vz : c.vz) * .3 + rnd(-5, 5), rnd(.25, .6), rnd(.15, .3), 0, ob.cols[0], false, 10);
+  combo++; comboT = 2.5;
+  const mult = Math.min(1 + (combo - 1) * .1, 10), pts = Math.round(ob.pts * mult); score += pts; S.count++; S.pts += pts;
+  if (blast) return;
+  c.nitro = Math.min(1, c.nitro + .008);
+  const k = Math.max(0, 1 - ob.slow / sp); c.vx *= k; c.vz *= k;               // 壊した分だけ軽く減速(止まらない)
+  shake = Math.min(1.2, shake + (o.type === 'block' ? .25 : .06));
+  if (S.sfxT <= 0) { sfxCrash(clamp(ob.slow / 1.4, .15, .8)); S.sfxT = .07; }
+  if (S.count >= S.milestone + 25) { S.milestone = Math.floor(S.count / 25) * 25; popup('SMASH ×' + S.count + '!', 'close'); }
+  else if (o.type === 'block') popup('ブロック粉砕! +' + pts, 'close');
+  if (o.type === 'block') { const bx = c.x - o.x, bz = c.z - o.z, bl = Math.hypot(bx, bz) || 1; crashFx(o.x, c.y + .5, o.z, bx / bl, bz / bl, 7 + v * .1, true); }
+}
+function mineBlast(ch, ci, o, v) {                                    // 地雷を踏んだ: 爆発して車が真上に吹き飛ぶ。近くの障害物も巻き込んで吹き飛ぶ(連鎖)
+  const c = car, bx = o.x, bz = o.z;
+  smashObstacle(ch, ci, o, v, { x: bx, z: bz });
+  c.air = true; c.hop = .05; c.hopV = 20;                              // 打ち上げ速度20m/s → 重力20m/s²でちょうど10m c.tumPV = rnd(-3.5, 3.5); c.tumRV = rnd(-4.5, 4.5);
+  c.vx += rnd(-2, 2); c.vz += rnd(-2, 2);
+  for (const cci of [ci - 1, ci, ci + 1]) {
+    const cch = chunks.get(cci); if (!cch || !cch.smash) continue;
+    for (const q of cch.smash.items) if (q.alive && Math.hypot(q.x - bx, q.z - bz) < 7.5) smashObstacle(cch, cci, q, v, { x: bx, z: bz });
+  }
+  for (let i = 0; i < 7; i++) emit(bx + rnd(-.6, .6), .5 + rnd(0, .8), bz + rnd(-.6, .6), rnd(-3, 3), rnd(2, 6), rnd(-3, 3), rnd(.3, .55), rnd(1.6, 2.6), 3.5, Math.random() < .5 ? 0xff7a1a : 0xffd070, true, 4);   // 爆発の閃光
+  for (let i = 0; i < 6; i++) emit(bx + rnd(-.8, .8), .6, bz + rnd(-.8, .8), rnd(-4, 4), rnd(2, 7), rnd(-4, 4), rnd(.9, 1.6), rnd(.8, 1.4), 2.4, 0x303030, false, 2);                  // 煙
+  for (let i = 0; i < 5; i++) spawnDebris('chip_block', bx + rnd(-.5, .5), .3, bz + rnd(-.5, .5), rnd(-9, 9), rnd(8, 15), rnd(-9, 9), 0);                                                 // 土くれ
+  sfxCrash(1); shake = 1.4; $('flash').style.opacity = .55; popup('BOOM! 地雷!', 'close');
+}
+function airStep(c, dt) {                                             // 破壊ステージだけの上下の動き(地雷で吹き飛んだときだけ。ほかのコースには上下の物理はない)
+  if (c.air) {
+    c.hopV -= 20 * dt; c.hop += c.hopV * dt; c.tumP += c.tumPV * dt; c.tumR += c.tumRV * dt;
+    if (c.hop <= 0 && c.hopV < 0) {                                   // 着地
+      const vi = -c.hopV; c.hop = 0; c.hopV = 0; c.air = false;
+      c.tumP = Math.atan2(Math.sin(c.tumP), Math.cos(c.tumP)); c.tumR = Math.atan2(Math.sin(c.tumR), Math.cos(c.tumR));      // 回転は一番近い向きへ戻る
+      shake = Math.min(1.5, shake + vi / 18); sfxCrash(clamp(vi / 24, .25, .7)); c.vx *= .94; c.vz *= .94;
+      for (let i = 0; i < 8; i++) emit(c.x + rnd(-1, 1), c.y + .2, c.z + rnd(-1, 1), c.vx * .2 + rnd(-3, 3), rnd(.5, 3), c.vz * .2 + rnd(-3, 3), rnd(.5, .9), rnd(.6, 1), 1.6, 0x9a8c70, false, 3);
+    }
+  } else { c.hop = 0; if (c.tumP || c.tumR) { const k = Math.exp(-9 * dt); c.tumP *= k; c.tumR *= k; if (Math.abs(c.tumP) < .002) c.tumP = 0; if (Math.abs(c.tumR) < .002) c.tumR = 0; } }
+}
+
+/* =====================================================================
+   ゲーム状態
+   ===================================================================== */
+let state = 'ready', overT = 0;
+// 加速は実車セレナの実測(0-60:3.96s / 0-100:8.00s / 0-160:20.36s)に合わせた直線カーブ: 加速 = ACC0 × (1 − 速度/VMAX)
+let ACC0 = 5.0, VMAX = 52;                   // m/s²、m/s(約187km/h)。以降の「let」の定数は車ごとに VEHICLES の値へ差し替わる
+const AI_ACC0 = 5.0, AI_VMAX = 52;           // ライバルの基準性能(自車がどの車でも変わらない)
+let DRAG = .0008, COAST = 1.4, BRAKE_MAX = 9.0;   // 空気抵抗係数、アクセルオフの自然減速(m/s²)、最大ブレーキ(m/s²)
+// --- ドライブモード(ECO / NORMAL / SPORT)。NORMAL は実測どおりの標準設定
+//   launch/mid: 発進・中間加速の倍率、thr/curve: アクセルの立ち上がり秒と踏み込みカーブ、regen: アクセルオフの回生の強さ(strong=強め)
+//   steerRate/yawResp: ハンドルの動く速さ・車の向きが変わる速さ(ゆったり⇔ダイレクト)、engine/engStart: 発電エンジンの積極さ・かかり始める残量、motorVol: モーター音
+const DRIVE_MODES = {
+  eco:    { name: 'ECO',    launch: .72, mid: .82, thr: .30, curve: 1.35, regen: 1.15, strong: true,  steerRate: .75, yawResp: 6.5, engine: .6,  engStart: .38, motorVol: .7,  desc: '穏やかなアクセル。発進はゆっくり滑らか、強めの回生、エンジンは控えめ。ゆったりした操作感。' },
+  normal: { name: 'NORMAL', launch: 1,   mid: 1,   thr: .12, curve: 1,    regen: 1,    strong: false, steerRate: 1,   yawResp: 9,   engine: 1,   engStart: .55, motorVol: 1,   desc: '素直なアクセル、自然な加速と減速。バランスのよい操作感。エンジンは必要な分だけ。' },
+  sport:  { name: 'SPORT',  launch: 1.2, mid: 1.12, thr: .06, curve: .85,  regen: 1,    strong: true,  steerRate: 1.3, yawResp: 12,  engine: 1.3, engStart: .70, motorVol: 1.4, desc: '鋭いアクセル。スッと出て力強く伸びる。強めの回生、エンジンは積極的。ダイレクトな操作感。' },
+};
+let driveMode = 'normal', M = DRIVE_MODES.normal;
+const GEN_CHARGE = .04, GEN_ASSIST = .012, CHARGE_ON = .20, CHARGE_OFF = .65;   // セレナ: 発電エンジンの充電(全開のとき1秒あたり4%。走行の最大消費より大きい)、20%以下で自動発電を始め、65%まで充電する
+const NITRO_REGEN = .04;                     // ニトロの自然回復(1秒あたり。空から満タンまで約25秒)
+const hasEPedal = () => VEH.powertrain.type === 'series' || VEH.powertrain.type === 'ev';   // ワンペダル(e-Pedal)があるのはe-POWERとEVだけ。THS/e:HEVは普通の回生
+const isHy = () => VEH.powertrain.type === 'ths' || VEH.powertrain.type === 'ehev';   // 車種ごとに独自の制御を持つハイブリッド
+let decelSel = 'D';                          // ステップワゴン: 減速セレクター(D=穏やか / B=回生を強める)
+let ePedal = false;                          // アクセルオフの回生を強めにするか。モードで自動設定(ECO/SPORT=強め)、Eキーで手動切替
+function setDriveMode(name, announce = true) {
+  driveMode = name; M = DRIVE_MODES[name]; ePedal = M.strong && (!VEH || hasEPedal());
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === name));
+  $('modeDesc').textContent = M.desc;
+  if (announce && state === 'play') popup('DRIVE MODE: ' + M.name);
+}
+const driveMult = v => v < 8 ? lerp(M.launch, M.mid, v / 8) : v < 35 ? M.mid : lerp(M.mid, 1, clamp((v - 35) / (VMAX - 35), 0, 1));   // 発進→中間→高速で倍率を移していく
+// --- 横方向のチューニング値(セレナ想定。実車の諸元ではなくシミュレーター用の設定) ---
+const G_ACC = 9.81;
+let MU_LAT = .82;            // タイヤの横グリップ μ → 最大横加速度 約8.05m/s²(0.82G)
+let WHEELBASE = 2.87, MIN_TURN_R = 5.7;                     // ホイールベース(m)、最小回転半径(外側前輪の軌跡の半径・セレナ 5.7m)
+let STEER_SF = [[0, 1], [20, 1], [50, .82], [100, .6], [160, .45]];   // 速度(km/h)ごとの舵角の補正
+let UNDERSTEER = .45, ROLL_DEG_PER_G = 2.8;
+const ROLL_VIEW = 1.3, ROLL_MAX = 7, ROLL_RESPONSE = 4.5;   // アンダーステアの強さ、ロール(度/G・画面上の誇張・上限度・追従の速さ)
+// --- 荷重移動(車体基本値: 重心高0.68m / ホイールベース2.87m / トレッド1.48m / 前後配分60:40)
+let CG_H = .68, TRACK = 1.48, FRONT_STATIC = .60;
+// 最大舵角: 車体中心が回る円の半径から、外側前輪の軌跡が最小回転半径(5.7m)になるように逆算(約31°)
+let MAX_STEER = Math.atan(WHEELBASE / (Math.sqrt(MIN_TURN_R ** 2 - (WHEELBASE / 2) ** 2) - TRACK / 2));
+let K_LONG = CG_H / (G_ACC * WHEELBASE);   // 前後の荷重移動: 加減速1m/s²あたり全荷重の約2.4%が前後に移る
+let K_LAT = CG_H / (G_ACC * TRACK);        // 左右の荷重移動: 横加速度1m/s²あたり約4.7%
+let REAR_MIN = .30;                        // 横滑り防止装置(VDC)の代わり: 後軸のグリップは最低でも μ×0.30 は残す
+const LOAD_SENS = .85, LAT_LOSS_K = .6;      // タイヤの荷重依存性(荷重が2倍でもグリップは2倍未満)、左右に荷重が偏ったときのグリップ低下
+// 車ごとの操作感(応答の速さ・ロール・ブレーキの効き方など)。Serena(標準)は従来の挙動そのまま。
+//   steerRate/steerDecay: キー入力に対するハンドルの動く速さ・速度による鈍り  yawResp: 舵を切ってから車の向きが変わる速さ  steerExp: 小舵角の効き(1未満=少し切っても素直に反応)
+//   yawRearMargin: 車が曲がる量を後輪の限界の何倍までにするか(小さいほど後ろが流れにくい。標準は事実上なし)  lowSpeedPush/tcb/lowGrip: 低速(〜40km/h)で切り込むと曲がりにくい・前輪を引きずる(タイトコーナーブレーキング)・低速のグリップ低下  trailBrake: ブレーキを残して切ると鋭くノーズが入る  brakeLat: ブレーキで削られる横グリップの割合  limitRot/rotDur: 限界の進入で一瞬リアが流れて4WD制御で収まる量・秒
+//   accelShift: 加速で前輪の荷重が抜ける割合(AWDは小さい)  knee: 限界に近づくときの頭打ちのなだらかさ(小さいほど段階的)  driveLat: アクセルで横グリップを削る割合(AWDは小さい)  downforce: ダウンフォースによる高速での横グリップ増(m/s² / (m/s)²)
+//   rollRate/rollMax: ロールの追従の速さ・上限度  pitchGain: 加減速の前後の傾きの大きさ  pitchFreq/pitchZeta: 前後の傾きのばねの速さ・粘り(小さいほど揺り戻しが大きい)  stopKick: 停止の瞬間に前のめりが戻る強さ
+//   thrRamp/thrRelease: アクセルの立ち上がり・戻りの秒  thrLinear: 踏み込みをそのまま伝える  brakeRamp/brakeRelease/brakeExp: ブレーキの立ち上がり・解除の秒・踏み増しの効き方
+const HND_DEFAULT = { steerRate: 1, steerDecay: 30, yawResp: 9, steerExp: 1, knee: 6, driveLat: 1, accelShift: 1, downforce: 0, lowSpeedPush: 0, yawRearMargin: 9, tcb: 0, lowGrip: 1, trailBrake: 0, brakeLat: 1, limitRot: 0, rotDur: .35, rollRate: 4.5, rollMax: 7, pitchGain: .0035, pitchFreq: 8, pitchZeta: .32, stopKick: .06, thrRamp: .12, thrRelease: .12, coastRamp: .15, thrLinear: false, brakeRamp: .3, brakeRelease: .15, brakeExp: 1.35 };
+let H = HND_DEFAULT, ACC_EXP = 1, ACC_TABLE = null, BRAKE_FADE = null;
+function applyPhysics(p) {               // 車の物理諸元を差し替える(最大舵角・荷重移動の係数は諸元から計算し直す)
+  ({ ACC0, VMAX, DRAG, COAST, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R, TRACK, CG_H, FRONT_STATIC, STEER_SF, UNDERSTEER, ROLL_DEG_PER_G, REAR_MIN } = p);
+  BRAKE_FADE = p.BRAKE_FADE || null;         // 速度(km/h)ごとの、ブレーキ単体の効き(BRAKE_MAX に対する倍率)。高速ほど効きが落ちる車用(空気抵抗などは別に加わる)
+  ACC_TABLE = p.ACC_TABLE || null;           // 速度(km/h)ごとの加速(m/s²)の表。あれば式より優先(実測の加速カーブを細かく合わせたい車用)
+  ACC_EXP = p.ACC_EXP ?? 1;                  // 加速の落ち方: 加速 = ACC0 × (1 − (速度/VMAX)^ACC_EXP)。1=直線的に落ちる、大きいほど高速まで加速が保たれる
+  MAX_STEER = Math.atan(WHEELBASE / (Math.sqrt(MIN_TURN_R ** 2 - (WHEELBASE / 2) ** 2) - TRACK / 2));
+  K_LONG = CG_H / (G_ACC * WHEELBASE); K_LAT = CG_H / (G_ACC * TRACK);
+}
+function lerpTable(tbl, x) {
+  if (x <= tbl[0][0]) return tbl[0][1];
+  for (let i = 1; i < tbl.length; i++) if (x <= tbl[i][0]) { const [x0, y0] = tbl[i - 1], [x1, y1] = tbl[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); }
+  return tbl[tbl.length - 1][1];
+}
+// e-Pedal: アクセルを離したときの回生減速(m/s²)。15km/h(4.2m/s)くらいまでは「ギュッ」と落とすが、それより下では効かなくなり(走行抵抗の0.3だけ)、完全停止はブレーキで行う。高速ほどマイルド
+const EPEDAL = [[4.2, .3], [6.9, 1.6], [10, 1.8], [20, 1.6], [30, 1.4], [40, 1.2]];
+function epedalDecel(v) {
+  if (v <= EPEDAL[0][0]) return EPEDAL[0][1];
+  for (let i = 1; i < EPEDAL.length; i++) if (v <= EPEDAL[i][0]) { const [x0, y0] = EPEDAL[i - 1], [x1, y1] = EPEDAL[i]; return y0 + (y1 - y0) * (v - x0) / (x1 - x0); }
+  return EPEDAL[EPEDAL.length - 1][1];
+}
+const car = { prog: 0, x: 0, z: 0, y: 0, h: 0, vx: 0, vz: 0, yaw: 0, steer: 0, s: 0, d: 0, out: 0, gen: 0, batt: .65, charging: false, dead: false, deadT: 0, p: 0, b: 0, coast: 0, aLat: 0, aLongF: 0, accS: 0, Ff: FRONT_STATIC, capF: 8, capR: 8, nitro: 1, health: 100, slip: 0, wheelRot: 0, pitch: 0, roll: 0, prevVf: 0, accel: 0, roadH: 0, sl: 0, thr: 0 };
+let score = 0, dist = 0, combo = 0, comboT = 0, shake = 0, maxKmh = 0, nitroOn = false, scraping = false, railCool = 0;
+let ghost = false, ghostOverlap = false, ghostHold = 0;   // 貫通(ニトロ発動中は車をすり抜ける)
+
+function placeCar(s, d, speed) {
+  if (isCity()) { cityPlaceCar(CITY_WARPS[city.warpI = 0]); return; }
+  const c = centerAt(s), L = [Math.cos(c.h), -Math.sin(c.h)];
+  car.x = c.x + L[0] * d; car.z = c.z + L[1] * d; car.h = c.h; car.y = c.y;
+  car.vx = Math.sin(c.h) * speed; car.vz = Math.cos(c.h) * speed; car.yaw = 0; car.steer = 0;
+  car.s = s; car.d = d; camH = c.h; car.prevVf = speed; car.outside = undefined; car.grass = false;
+  car.air = false; car.hop = 0; car.hopV = 0; car.tumP = car.tumR = 0; car.pitch = car.roll = car.pitchV = 0;
+  for (const t of traffic) t.prevRel = t.s - car.s;
+}
+const courseStartS = () => course === 'tsukuba' ? LAP_LEN - 6 : 60;   // サーキットはスタートラインの6m手前(ポールポジション)から
+let lapClock = 0, lapStart = null, lapNo = 0, lapIdx = 0, lastLap = null, bestLap = null;
+const fmtLap = t => { const m = Math.floor(t / 60), sec = t - m * 60; return m + ':' + (sec < 10 ? '0' : '') + sec.toFixed(2); };
+function resetLaps() { car.prog = car.s; lapClock = 0; lapStart = null; lapNo = 0; lapIdx = Math.floor(car.prog / LAP_LEN); }   // prog: レースの進み具合(戻らない)。ショートカットや逆走で s が飛んでも、順位・ラップ数はこちらで決める
+function updateLap(dt) {
+  if (course !== 'tsukuba' || state !== 'play') return;
+  lapClock += dt;
+  const idx = Math.floor(car.prog / LAP_LEN);
+  if (idx > lapIdx) {                                   // スタートラインを通過
+    if (lapStart !== null) {
+      const t = lapClock - lapStart; lastLap = t;
+      if (bestLap === null || t < bestLap) { bestLap = t; popup('LAP ' + lapNo + '  ' + fmtLap(t) + '  BEST!', 'close'); }
+      else popup('LAP ' + lapNo + '  ' + fmtLap(t));
+      sfxPass();
+      if (raceState === 'racing' && lapNo >= RACE_LAPS) finishRace();               // 規定周回を走りきったらフィニッシュ
+    }
+    lapNo++; lapStart = lapClock;
+  }                                                     // prog は戻らないので、逆走・ショートカットでラップ数が二重に数えられたり、計測が途切れたりしない
+  lapIdx = idx;
+}
+function restart() {
+  resetDestruction(); resetWear();
+  score = 0; dist = 0; combo = 0; comboT = 0; maxKmh = 0; overT = 0; car.health = 100; car.nitro = 1; car.batt = battInit(); car.gen = 0; resetHy(); car.charging = false; car.assist = false; car.dead = false; car.deadT = 0;
+  placeCar(courseStartS(), 1.8, 0); initTraffic(); resetLaps();
+  $('ovOver').classList.remove('on');
+  if (course === 'tsukuba') beginCountdown(); else state = 'play';
+}
+const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して吹き飛ぶ)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、北の高速の加速車線から本線へ合流する。歩行者や歩道はなし。右上のミニマップで信号・目標を確認(T でワープ)。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
+function refreshCourseUI() {
+  document.querySelectorAll('[data-course]').forEach(b => b.classList.toggle('on', b.dataset.course === course));
+  $('courseDesc').textContent = COURSE_DESC[course];
+}
+function setCourse(name) {                              // コース切り替え: 道路・木・交通・自車位置を作り直して待機画面へ
+  damagedChunks.clear(); resetDestruction(); resetWear();
+  course = name; resetRoad(); setLanes();
+  for (const [, ch] of chunks) { scene.remove(ch.grp); ch.geos.forEach(g => g.dispose()); ch.inst.forEach(m => m.dispose()); }
+  chunks.clear();
+  if (isCity()) cityBuild(); else cityDispose();
+  ground.material.color.setHex(isCity() ? 0x8c8c86 : 0x4d5a33);
+  car.health = 100; car.nitro = 1; car.batt = battInit(); car.gen = 0; resetHy(); car.charging = false; car.assist = false; car.dead = false; car.deadT = 0; overT = 0; score = 0; dist = 0; combo = 0; comboT = 0; maxKmh = 0; lastLap = null; bestLap = null;
+  placeCar(courseStartS(), 1.8, 0); initTraffic(); resetLaps(); updateChunks(car.s, 99);
+  state = 'ready'; $('ovStart').classList.add('on'); $('ovOver').classList.remove('on'); refreshCourseUI();
+}
+function startGame() { initAudio(); if (ac && ac.state === 'suspended') ac.resume(); $('ovStart').classList.remove('on'); if (course === 'tsukuba') beginCountdown(); else state = 'play'; }
+function recover() {                                    // R: 一番近い道路(いちばん近い車線)へ戻る。吹き飛び・回転もリセット
+  const sp = Math.max(isCity() ? 6 : 15, Math.hypot(car.vx, car.vz) * .5);
+  if (isCity()) { cityRecover(sp); popup('道路に復帰'); return; }
+  let bd = 1.8, bm = 1e9; for (const l of LANES) if (l.dir > 0 && Math.abs(l.d - car.d) < bm) { bm = Math.abs(l.d - car.d); bd = l.d; }
+  placeCar(car.s, bd, sp); popup('道路に復帰');
+}
+
+/* =====================================================================
+   交通(道路座標 s,d で走らせる)
+   ===================================================================== */
+const LANES = [];
+function setLanes() {                   // 公道は対面通行(左側通行)、サーキットは全車線が同方向
+  LANES.length = 0;
+  if (course === 'tsukuba') LANES.push({ d: 1.8, dir: 1 }, { d: 5.4, dir: 1 }, { d: -1.8, dir: 1 }, { d: -5.4, dir: 1 });
+  else LANES.push({ d: 1.8, dir: 1 }, { d: 5.4, dir: 1 }, { d: -1.8, dir: -1 }, { d: -5.4, dir: -1 });
+}
+setLanes();
+const traffic = [];
+const TRAFFIC_N = 30;
+function makeTraffic() {
+  const type = pickType();
+  const o = { ...type, color: type.truck ? 0xd8d8d8 : PAINTS[Math.floor(Math.random() * PAINTS.length)] };
+  const m = makeCar(o); m.group.rotation.order = 'YXZ'; scene.add(m.group);
+  m.parts = m.group.children.filter(c => !c.isSprite);                                   // 箱モデル本体(Serenaのときは隠す)
+  m.tailG = m.group.children.filter(c => c.isSprite && c.material.color.getHexString() === 'ff3020');
+  m.headG = m.group.children.filter(c => c.isSprite && c.material.color.getHexString() !== 'ff3020');
+  m.glowPos = [...m.tailG, ...m.headG].map(g => g.position.clone());
+  return { m, color: o.color, active: true, rival: false, finT: null, name: '', base: { w: o.w, l: o.l, truck: !!o.truck }, w: o.w, l: o.l, s: 0, d: 0, dir: 1, vs: 0, cruise: 20, vd: 0, spin: 0, yaw: 0, hit: false, cool: 0, prevRel: 0, x: 0, z: 0, heading: 0, roadH: 0, sl: 0 };
+}
+function setVisual(t) {                  // 対向車ならSerena、それ以外は箱の車
+  const useS = !!SERENA && t.dir < 0 && !t.base.truck && Math.random() < .65;
+  if (useS && !t.serena) { t.serena = SERENA.clone(true); t.m.group.add(t.serena); }
+  if (t.serena) t.serena.visible = useS;
+  t.m.parts.forEach(o => o.visible = !useS);
+  t.w = useS ? 1.85 : t.base.w; t.l = useS ? SERENA_LEN : t.base.l;
+  const g = [...t.m.tailG, ...t.m.headG];
+  g.forEach((sp, i) => {
+    if (!useS) { sp.position.copy(t.m.glowPos[i]); return; }
+    const tail = i < t.m.tailG.length, side = (tail ? i : i - t.m.tailG.length) % 2 ? -1 : 1;
+    sp.position.set(side * .78, tail ? 1.0 : .8, tail ? -SERENA_LEN / 2 - .1 : SERENA_LEN / 2 + .2);
+  });
+}
+function respawn(t, sMin, sMax) {
+  for (let tries = 0; tries < 12; tries++) {
+    const lane = LANES[Math.random() < .6 ? Math.floor(Math.random() * 2) : 2 + Math.floor(Math.random() * 2)];
+    const s = rnd(sMin, sMax);
+    if (traffic.some(o => o !== t && !o.hit && Math.abs(o.d - lane.d) < 2 && Math.abs(o.s - s) < 50)) continue;
+    t.delay = rnd(.4, 1.2); t.seeT = 0;
+    t.s = s; t.d = lane.d; t.laneD = lane.d; t.laneCd = 0; t.hitT = 0; t.dir = lane.dir; t.hit = false; t.phased = false; t.cool = 0; t.vd = 0; t.spin = 0; t.yaw = 0;
+    t.cruise = t.dir > 0 ? rnd(14, 26) : rnd(16, 30);
+    t.ignore = t.dir < 0 && Math.random() < .2;                                     // 対向車の2割は前をよく見ない(気づかず追突する)
+    if (t.l > 6) t.cruise *= .85;
+    if (t.dir > 0) for (const o of traffic) if (o !== t && o.active && o.dir === t.dir && Math.abs(o.d - t.d) < 2 && (o.s - s) * t.dir > 0 && (o.s - s) * t.dir < 140) t.cruise = Math.min(t.cruise, Math.abs(o.vs) + 1);   // すぐ前の車より速く出ない(出てすぐ追突しない)
+    t.vs = t.dir * t.cruise;
+    setVisual(t); t.prevRel = t.s - car.s; return;
+  }
+  const ln = LANES[LANES.length - 1]; t.s = sMax + 200; t.d = ln.d; t.laneD = ln.d; t.dir = ln.dir; t.hit = false; t.phased = false; t.vs = ln.dir * 20; t.cruise = 20; setVisual(t); t.prevRel = t.s - car.s;
+}
+function initTraffic() {
+  while (traffic.length < TRAFFIC_N) traffic.push(makeTraffic());
+  if (isCity()) { cityInitTraffic(); return; }
+  if (course === 'tsukuba') { setupGrid(); return; }
+  raceState = 'none';
+  if (course === 'straight' || course === 'smash') { traffic.forEach(t => { t.active = false; t.rival = false; t.m.group.visible = false; }); return; }   // 直線コースは車なし
+  traffic.forEach((t, i) => { const on = i < TRAFFIC_N; t.active = on; t.rival = false; t.parked = false; t.m.group.visible = on; });
+  const pubT = traffic.slice(0, TRAFFIC_N);
+  for (const t of pubT) t.s = -9999;
+  for (const t of pubT) respawn(t, car.s + 30, car.s + 890);
+}
+function popup(text, cls) { const el = $('pop'); el.textContent = text; el.className = ''; void el.offsetWidth; el.className = 'show ' + (cls || ''); }
+
+/* =====================================================================
+   レース(筑波サーキット): 全車一斉スタート、順位、3周でフィニッシュ
+   ===================================================================== */
+const RIVALS = 9, RACE_LAPS = 3, COUNTDOWN_S = 3, RACE_DMG = .35;
+let raceState = 'none';                 // 'none'(公道) / 'grid'(カウントダウン中) / 'racing' / 'done'(自車フィニッシュ)
+let raceClock = 0, countT = 0, playerFinT = null, finalRank = null, finishTimer = 0, lastCount = -1;
+const makeSkill = () => { const q = Math.random(); return { lat: 6.6 + q * 2.0, brake: 8.0 + q * 1.6, acc: 1.0 + q * .1, top: 1.0 + q * .05, dTarget: rnd(-2.5, 2.5) }; };   // ライバルの個体差(旋回・制動・加速・最高速・好みの走行位置)。最初は 4.6-6.4 / 6.0-7.4 / .88-1 / .9-.98、次に 5.9-7.9 / 7.2-8.8 / .96-1.06 / .96-1.02 にして、さらに強化
+function setupGrid() {                   // グリッド: 自車がポールポジション(スタートライン直前)、ほかは順番に後ろへ2列で並ぶ
+  const pool = traffic.filter(t => !t.base.truck).slice(0, RIVALS);
+  traffic.forEach(t => { t.active = pool.includes(t); t.rival = t.active; t.m.group.visible = t.active; });
+  const skills = pool.map(makeSkill).sort((a, b) => b.lat - a.lat);   // 速い順に前へ
+  const start = LAP_LEN - 6;
+  pool.forEach((t, i) => {
+    const k = i + 1;
+    Object.assign(t, { name: 'R' + k, skill: skills[i], s: start - 7 * k, d: k % 2 ? 2.2 : -2.2, dir: 1, vs: 0, vd: 0, spin: 0, yaw: 0, hit: false, hitT: 0, cool: 0, phased: false, finT: null, passT: 0 });
+    setVisual(t);
+  });
+  placeCar(start, -2.2, 0);
+  raceState = 'grid'; raceClock = 0; playerFinT = null; finalRank = null; countT = COUNTDOWN_S; lastCount = -1;
+}
+function standings() {                   // 順位: フィニッシュ済みはタイム順、走行中は進んだ距離順
+  const list = [{ me: true, name: 'あなた', s: car.prog, fin: playerFinT, color: 0xd8201c }];
+  for (const t of traffic) if (t.active && t.rival) list.push({ name: t.name, s: t.s, fin: t.finT, color: t.color });
+  list.sort((a, b) => (a.fin !== null && b.fin !== null) ? a.fin - b.fin : a.fin !== null ? -1 : b.fin !== null ? 1 : b.s - a.s);
+  return list;
+}
+function beginCountdown() { state = 'countdown'; if (raceState !== 'grid') setupGrid(); }
+function updateRace(dt) {
+  if (course !== 'tsukuba') return;
+  if (raceState === 'grid' && state === 'countdown') {
+    countT -= dt;
+    const n = Math.ceil(countT);
+    if (n !== lastCount && n >= 1) { lastCount = n; showCount(String(n)); sfxBeep(660, .18); }
+    if (countT <= 0) { raceState = 'racing'; state = 'play'; showCount('GO!'); sfxBeep(1320, .5); }
+  } else if (raceState === 'racing' || raceState === 'done') raceClock += dt;
+  if (raceState === 'done') { finishTimer -= dt; if (finishTimer <= 0 && state !== 'over') showFinish(); }
+  for (const t of traffic) if (t.active && t.rival && t.finT === null && t.s >= (RACE_LAPS + 1) * LAP_LEN) t.finT = raceClock;
+}
+function showCount(text) { const el = $('count'); el.textContent = text; el.className = ''; void el.offsetWidth; el.className = 'show'; }
+function finishRace() {
+  raceState = 'done'; playerFinT = raceClock; finalRank = standings(); finishTimer = 2.4;
+  popup('FINISH!  ' + (finalRank.findIndex(x => x.me) + 1) + '位', 'close');
+}
+function showFinish() {
+  state = 'over'; overT = 2;
+  const me = finalRank.findIndex(x => x.me) + 1;
+  const rows = finalRank.map((x, i) => `<div${x.me ? ' style="color:#ffd34d;font-weight:800"' : ''}>${i + 1}位　${x.name}　${x.fin !== null ? fmtLap(x.fin) : '走行中'}</div>`).join('');
+  showOver(me === 1 ? '優勝!' : 'フィニッシュ!', `<b style="font-size:26px">${me}位 / ${finalRank.length}</b><br>タイム <b>${fmtLap(playerFinT)}</b>　ベストラップ <b>${bestLap !== null ? fmtLap(bestLap) : '-'}</b><div style="display:inline-block;text-align:left;margin-top:8px;font-size:13px">${rows}</div>`);
+}
+function showOver(title, html) { $('overTitle').textContent = title; $('overText').innerHTML = html; $('ovOver').classList.add('on'); }
+function sfxBeep(f, dur) {
+  if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(.12, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur + .02);
+}
+function rivalStep(t, dt) {              // ライバルの走行(自車が速い車のときは全体に強めにする: VEH.rivalPace): コースの曲率から旋回限界速度を出し、手前から減速する。車間・追い越しも簡易に判断
+  const sk0 = t.skill, P = VEH.rivalPace ?? 1.07, sk = P === 1 ? sk0 : { ...sk0, lat: sk0.lat * P * P, brake: sk0.brake * P, acc: sk0.acc * P, top: Math.min(1.25, sk0.top * P) };
+  if (t.hit) {                           // 接触されたら少し滑って、しばらくしたら走行に復帰
+    t.hitT += dt; t.vs *= Math.exp(-1.0 * dt); t.vd *= Math.exp(-1.1 * dt); t.spin *= Math.exp(-.7 * dt);
+    if (t.hitT > 1.4) { t.hit = false; t.hitT = 0; }
+    return;
+  }
+  t.yaw *= Math.exp(-5 * dt); t.spin *= Math.exp(-5 * dt); t.vd *= Math.exp(-4 * dt);
+  if (raceState !== 'racing' && raceState !== 'done') { t.vs = 0; return; }
+  let vt = AI_VMAX * sk.top;
+  for (let a = 0; a <= 240; a += 12) {
+    const k = kAt(t.s + a);
+    if (k > 1e-4) { const vlim = Math.sqrt(sk.lat / k); vt = Math.min(vt, Math.sqrt(vlim * vlim + 2 * sk.brake * a)); }
+  }
+  let lead = null, gap = 1e9;
+  for (const o of traffic) if (o !== t && o.active && Math.abs(o.d - t.d) < 2.1 && o.s > t.s) { const g = o.s - t.s - (o.l + t.l) / 2; if (g < gap) { gap = g; lead = o; } }
+  if (Math.abs(car.d - t.d) < 2.1 && car.s > t.s) { const g = car.s - t.s - (t.l + 4.7) / 2; if (g < gap) { gap = g; lead = { vs: Math.max(0, car.vx * Math.sin(car.roadH) + car.vz * Math.cos(car.roadH)), d: car.d }; } }
+  t.passT = Math.max(0, t.passT - dt);
+  if (lead && gap < 20 + t.vs * .5) {
+    vt = Math.min(vt, lead.vs + Math.max(0, gap - 6) * .3);
+    if (lead.vs < t.vs * .95 && gap < 16 && t.passT <= 0) { t.passD = clamp(lead.d + (lead.d > 0 ? -3.1 : 3.1), -5.6, 5.6); t.passT = 3.5; }   // 遅い車に追いついたら横へよけて追い越す
+  }
+  const accel = AI_ACC0 * sk.acc * Math.max(0, 1 - t.vs / AI_VMAX);
+  t.vs += clamp(vt - t.vs, -sk.brake * dt, accel * dt);
+  const dT = clamp(t.passT > 0 ? t.passD : sk.dTarget, -5.6, 5.6);
+  t.d += clamp(dT - t.d, -1.6 * dt, 1.6 * dt);
+}
+function curveSpeed(t) {                // カーブの手前から減速する(先の曲率が大きいほど遅く)。ヘアピンで極端に速く走らないように
+  let k = 0;
+  for (const a of t.dir > 0 ? [0, 25, 50] : [0, -25, -50]) k = Math.max(k, Math.abs(centerAt(Math.max(0, t.s + a)).k));
+  return k > 1e-4 ? Math.sqrt(5.5 / k) : 1e9;
+}
+function stepTraffic(dt) {
+  const c = car, active = state === 'play';
+  // 貫通: ニトロ発動中は車をすり抜ける。ニトロが切れた瞬間に車と重なっていたら、抜けきるまで(最大2秒)貫通を続ける
+  const wasOverlap = ghostOverlap; ghostOverlap = false;
+  ghostHold = (ghost && !nitroOn && wasOverlap) ? ghostHold + dt : 0;
+  ghost = active && (nitroOn || (ghost && wasOverlap && ghostHold < 2));
+  if (isCity()) { cityStepTraffic(dt, active); return; }
+  if (course === 'smash') { smashStep(dt); return; }
+  for (const t of traffic) {
+    if (!t.active) continue;
+    t.cool = Math.max(0, t.cool - dt);
+    if (t.rival) rivalStep(t, dt);
+    else if (!t.hit) {
+      t.hitT = 0; t.laneCd = Math.max(0, (t.laneCd || 0) - dt); if (t.laneD === undefined) t.laneD = t.d;
+      const dir = t.dir, vSelf = t.vs * dir;
+      let target = Math.min(t.cruise, curveSpeed(t));                                  // 走る速さ(進行方向の大きさ)
+      // 前の車(同じ向きの車・止まっている事故車)に合わせる: 手前から、ぶつからずに合わせられる速さまで落とす(対向車どうしも)
+      let lead = null, gap = 1e9;
+      for (const o of traffic) {
+        if (o === t || !o.active || Math.abs(o.d - t.d) > 1.9) continue;
+        const ahead = (o.s - t.s) * dir; if (ahead <= 0) continue;
+        if (o.dir !== dir && !o.hit) continue;
+        const g = ahead - (o.l + t.l) / 2; if (g < gap) { gap = g; lead = o; }
+      }
+      let vLead = lead ? Math.max(0, lead.vs * dir) : 0;
+      if (dir > 0 && Math.abs(c.d - t.d) < 1.9 && c.s > t.s) { const g = c.s - t.s - (t.l + 4.4) / 2; if (g < gap) { gap = g; lead = { d: c.d }; vLead = Math.max(0, c.vx * Math.sin(c.roadH) + c.vz * Math.cos(c.roadH)); } }
+      const dumb = dir < 0;                                                         // 対向車はあえて少しぼんやり: 前を見る距離が短く、ブレーキも弱く遅い。追い越しもしない(たまに追突して玉突きになる)
+      const look = dumb ? 26 : 90, bSafe = dumb ? 4 : 6;
+      t.seeT = lead && gap < look ? (t.seeT || 0) + dt : 0;                        // 前の車に気づいてから、ブレーキを踏み始めるまでの間(対向車だけ0.4〜1.1秒ぼんやり)
+      if (lead && gap < look && (!dumb || (!t.ignore && t.seeT > (t.delay ?? .7)))) target = Math.min(target, Math.sqrt(vLead * vLead + 2 * bSafe * Math.max(0, gap - (dumb ? 2 : 3.5))));   // bSafe m/s²で止まれる(合わせられる)速さ
+      // 遅い車に追いついたら、空いていれば隣の同じ向きの車線へ移って追い越す
+      if (!dumb && lead && gap < 30 && vLead < vSelf * .85 && (t.laneCd || 0) <= 0) {
+        for (const ln of LANES) {
+          if (ln.dir !== dir || Math.abs(ln.d - t.laneD) < 1) continue;
+          if (traffic.some(o => o !== t && o.active && Math.abs(o.d - ln.d) < 2.4 && (o.s - t.s) * dir > -16 && (o.s - t.s) * dir < 36)) continue;
+          t.laneD = ln.d; t.laneCd = 5; break;
+        }
+      }
+      t.vs = dir * (vSelf + clamp(target - vSelf, dumb ? -4.5 * dt : -9 * dt, 5 * dt));
+      t.yaw *= Math.exp(-3 * dt); t.spin *= Math.exp(-3 * dt); t.vd *= Math.exp(-4 * dt);      // ぶつけられた後は、向きを立て直して車線へ戻る
+      t.d += clamp(t.laneD - t.d, -1.5 * dt, 1.5 * dt);
+    } else {
+      t.vs *= Math.exp(-.45 * dt); t.vd *= Math.exp(-1.1 * dt); t.spin *= Math.exp(-.7 * dt);
+      t.hitT = (t.hitT || 0) + dt;
+      if (t.hitT > 2.6 && Math.abs(t.vs) < 4 && !t.rival) {                              // 事故車はしばらくしたら復帰して走り出す(道が詰まらない)
+        t.hit = false; t.hitT = 0; t.yaw = Math.atan2(Math.sin(t.yaw), Math.cos(t.yaw)); t.spin = 0; t.laneCd = 0;
+        let bd = t.d, bm = 1e9; for (const ln of LANES) if (ln.dir === t.dir && Math.abs(ln.d - t.d) < bm) { bm = Math.abs(ln.d - t.d); bd = ln.d; }
+        t.laneD = bd;
+      }
+    }
+    t.s += t.vs * dt; t.d = clamp(t.d + t.vd * dt, -CAR_LIM + 1, CAR_LIM - 1); t.yaw += t.spin * dt;
+    // 画面外の車を前方へ再配置
+    if (!t.rival && (t.s < c.s - 130 || t.s > c.s + 1100)) respawn(t, c.s + 520, c.s + 950);
+    const cc = centerAt(t.s);
+    t.roadH = cc.h; t.sl = cc.sl;
+    t.x = cc.x + Math.cos(cc.h) * t.d; t.z = cc.z - Math.sin(cc.h) * t.d;
+    t.heading = cc.h + (t.dir < 0 ? Math.PI : 0) + t.yaw;
+    const g = t.m.group;
+    g.position.set(t.x, cc.y, t.z); g.rotation.set(-Math.atan(t.dir * cc.sl), t.heading, 0);
+
+    if (!active) { t.prevRel = t.s - c.s; continue; }
+    const rel = t.s - c.s;
+    // すり抜け判定(相対位置の符号が反転した瞬間の横距離)
+    if (!t.hit && t.cool <= 0 && ((t.prevRel > 0 && rel <= 0) || (t.prevRel < 0 && rel >= 0))) {
+      const gapD = Math.abs(c.d - t.d), vsP = c.vx * Math.sin(c.roadH) + c.vz * Math.cos(c.roadH), relV = Math.abs(vsP - t.vs);
+      if (gapD < 3.5 && relV > 6) {                  // 横の間隔3.5m未満・相対速度6m/s(約22km/h)以上ですり抜け扱い
+        combo++; comboT = 5;
+        const mult = Math.min(1 + (combo - 1) * .5, 10), close = gapD < 2.7;
+        const pts = Math.round((30 + relV * 3.6 * .4) * mult * (close ? 2 : 1) * (t.dir < 0 ? 1.5 : 1));
+        score += pts; c.nitro = Math.min(1, c.nitro + (close ? .18 : .1));
+        popup((close ? 'CLOSE CALL! +' : 'NEAR MISS +') + pts, close ? 'close' : ''); sfxPass();
+      }
+    }
+    t.prevRel = rel;
+    if (Math.abs(rel) < 12) collide(t);
+  }
+  if (course === 'public') trafficPileup();
+}
+function trafficPileup() {                // 交通どうしの衝突。スピンしていてもいなくても、対向車も同じ向きの車もぶつかる(玉突き事故)
+  const L = traffic.filter(t => t.active && !t.rival);
+  for (const t of L) t.pc = Math.max(0, (t.pc || 0) - 1 / 60);
+  for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
+    const a = L[i], b = L[j];
+    if (Math.abs(a.s - b.s) > 7 || Math.abs(a.d - b.d) > 4.4) continue;
+    const ra = a.w * .5, rb = b.w * .5, oa = Math.max(0, a.l / 2 - ra), ob = Math.max(0, b.l / 2 - rb);
+    const sa = Math.sin(a.heading), ca = Math.cos(a.heading), sb = Math.sin(b.heading), cb = Math.cos(b.heading);
+    let best = null;
+    for (const ka of [oa, -oa]) for (const kb of [ob, -ob]) {                // 各車を前後2つの円で近似
+      const dx = a.x + sa * ka - (b.x + sb * kb), dz = a.z + ca * ka - (b.z + cb * kb), d = Math.hypot(dx, dz), pen = ra + rb - d;
+      if (pen > 0 && (!best || pen > best.pen)) best = { pen, nx: d > 1e-4 ? dx / d : 1, nz: d > 1e-4 ? dz / d : 0, px: (a.x + b.x) / 2, pz: (a.z + b.z) / 2 };
+    }
+    if (!best) continue;
+    const { nx, nz, pen } = best, Ta = [Math.sin(a.roadH), Math.cos(a.roadH)], Da = [Math.cos(a.roadH), -Math.sin(a.roadH)];
+    const ds = (nx * Ta[0] + nz * Ta[1]) * pen * .5, dd = (nx * Da[0] + nz * Da[1]) * pen * .5;       // めり込みを半分ずつ押し戻す(道路座標)
+    a.s += ds; b.s -= ds; a.d += dd; b.d -= dd;
+    const rvx = (Ta[0] * a.vs + Da[0] * a.vd) - (Ta[0] * b.vs + Da[0] * b.vd), rvz = (Ta[1] * a.vs + Da[1] * a.vd) - (Ta[1] * b.vs + Da[1] * b.vd);
+    const vn = rvx * nx + rvz * nz;
+    if (vn < 0) {
+      const j = -1.3 * vn * .5, js = j * (nx * Ta[0] + nz * Ta[1]), jd = j * (nx * Da[0] + nz * Da[1]);
+      a.vs += js; b.vs -= js; a.vd += jd; b.vd -= jd; a.spin += rnd(-1, 1) * j * .25; b.spin += rnd(-1, 1) * j * .25;
+      a.hit = b.hit = true; a.hitT = b.hitT = 0;
+      if ((a.pc || 0) <= 0 && (b.pc || 0) <= 0 && j > 1.5) {
+        a.pc = b.pc = .4;
+        const dist = Math.hypot(best.px - car.x, best.pz - car.z), near = clamp(1 - dist / 140, 0, 1);
+        if (dist < 90) crashFx(best.px, centerAt(a.s).y + .55, best.pz, nx, nz, j, false);
+        if (near > 0) { sfxCrash(clamp(j / 25, 0, 1) * near); if (dist < 40) shake = Math.min(1.2, shake + near * j / 40); }
+        const ey = centerAt(a.s).y + .6; for (let k = 0; k < 8; k++) emit(best.px, ey, best.pz, rnd(-5, 5), rnd(1, 5), rnd(-5, 5), rnd(.3, .7), rnd(.15, .3), 0, 0xffb040, true, 12);
+      }
+    }
+  }
+}
+function collide(t) {
+  const c = car, Fx = Math.sin(c.h), Fz = Math.cos(c.h);
+  const tfx = Math.sin(t.heading), tfz = Math.cos(t.heading), tlx = Math.cos(t.heading), tlz = -Math.sin(t.heading);
+  const hx = t.w / 2, hl = t.l / 2, R = PLAYER.hit.r;
+  for (const off of [PLAYER.hit.off, -PLAYER.hit.off]) {
+    const px = c.x + Fx * off, pz = c.z + Fz * off, rx = px - t.x, rz = pz - t.z;
+    const lx = rx * tlx + rz * tlz, fz = rx * tfx + rz * tfz;
+    const cx = clamp(lx, -hx, hx), cz = clamp(fz, -hl, hl), dx = lx - cx, dz = fz - cz, d2 = dx * dx + dz * dz;
+    if (d2 >= R * R) continue;
+    if (ghost) {                                              // 貫通中: ぶつからず、車ごとに1回だけ得点
+      ghostOverlap = true; t.cool = Math.max(t.cool, .8);     // すり抜け判定との二重加点を防ぐ
+      if (!t.phased) {
+        t.phased = true; combo++; comboT = 5;
+        const pts = Math.round(150 * Math.min(1 + (combo - 1) * .5, 10)); score += pts;
+        popup('貫通! +' + pts, 'close'); sfxPass();
+        for (let i = 0; i < 10; i++) emit(px, c.y + .8, pz, rnd(-4, 4), rnd(0, 3), rnd(-4, 4), rnd(.3, .6), rnd(.3, .6), 1, 0x66ccff, true);
+      }
+      continue;
+    }
+    let nlx, nlz, pen;
+    if (d2 > 1e-6) { const dd = Math.sqrt(d2); nlx = dx / dd; nlz = dz / dd; pen = R - dd; }
+    else { const a = hx - Math.abs(lx), b = hl - Math.abs(fz); if (a < b) { nlx = Math.sign(lx) || 1; nlz = 0; pen = R + a; } else { nlx = 0; nlz = Math.sign(fz) || 1; pen = R + b; } }
+    const nx = tlx * nlx + tfx * nlz, nz = tlz * nlx + tfz * nlz;       // 相手→自車の法線
+    c.x += nx * pen; c.z += nz * pen;
+    const Tx = Math.sin(t.roadH), Tz = Math.cos(t.roadH), tvx = Tx * t.vs, tvz = Tz * t.vs;
+    const vn = (c.vx - tvx) * nx + (c.vz - tvz) * nz;
+    if (vn < 0) {
+      const j = -1.25 * vn;
+      c.vx += nx * j * .58; c.vz += nz * j * .58; c.yaw += (Math.random() - .5) * Math.min(j, 12) * .18;
+      const dvx = -nx * j * .42, dvz = -nz * j * .42;
+      t.vs += dvx * Tx + dvz * Tz; t.vd += dvx * Math.cos(t.roadH) - dvz * Math.sin(t.roadH); t.spin += (Math.random() - .5) * j * .25;
+      if (t.cool <= 0) {
+        t.cool = .6; t.hit = true;
+        const dmg = clamp(j * 1.4, 3, 50); damage(dmg);
+        shake = Math.min(1.5, shake + j / 20); sfxCrash(clamp(j / 25, 0, 1));
+        for (let i = 0; i < 14; i++) emit(px, c.y + .6, pz, rnd(-6, 6), rnd(1, 6), rnd(-6, 6), rnd(.3, .7), rnd(.15, .3), 0, 0xffb040, true, 12);
+        popup('CRASH! -' + Math.round(dmg) + '%'); $('flash').style.opacity = clamp(j / 30, .2, .6);
+        crashFx(px - nx * R, c.y + .55, pz - nz * R, nx, nz, j, true); crashFx(px - nx * R, c.y + .55, pz - nz * R, -nx, -nz, j, false);
+      }
+      combo = 0;
+    }
+  }
+}
+function damage(v) { if (DAMAGE_ENABLED) car.health = Math.max(0, car.health - v * (course === 'tsukuba' ? RACE_DMG : 1)); combo = 0; }   // ダメージ無効中も、ぶつかるとコンボは切れる
+
+/* =====================================================================
+   自車の挙動(アーケード寄りの車両運動)
+   ===================================================================== */
+function stepPlayer(dt) {
+  const c = car, play = state === 'play', alive = play && c.health > 0;
+  const air = !!c.air;                                              // 吹き飛んでいる間は、アクセル・ブレーキ・ハンドルは効かない
+  const hb = alive && keys.space && !air;
+  nitroOn = !!(alive && keys.shift && c.nitro > .01 && !c.dead);
+  // キーボードは押す/離すの2択なので、ペダルの踏み込みを滑らかにする(アクセル0.12秒・ブレーキ0.3秒で全開)
+  const upKey = alive && keys.up && !air, downKey = alive && keys.down && !air;
+  c.p += clamp((upKey ? 1 : 0) - c.p, -dt / H.thrRelease, dt / (H.thrRamp * M.thr / .12));
+  c.b += clamp((downKey ? 1 : 0) - c.b, -dt / H.brakeRelease, dt / H.brakeRamp);
+  c.coast = upKey ? 0 : Math.min(1, c.coast + dt / H.coastRamp);       // 離した瞬間から0.15秒で回生が立ち上がる
+  const thrEff = H.thrLinear ? c.p : Math.pow(c.p, M.curve) * (c.p < .2 ? .8 : 1);                     // 低開度だけ少し鈍らせる(急な飛び出し防止)
+  c.thr = c.p; c.thrE = thrEff;
+
+  let Fx = Math.sin(c.h), Fz = Math.cos(c.h), vf = c.vx * Fx + c.vz * Fz;
+  const av = Math.abs(vf);
+  // --- ハンドル → ヨー(旋回)。速度が上がるほど切れ角は小さく
+  const st = alive && !air ? (keys.left ? 1 : 0) - (keys.right ? 1 : 0) : 0;
+  const rate = (st === 0 ? 6 : 3.6) * M.steerRate * H.steerRate / (1 + av / H.steerDecay);       // 速いほどキー入力に対するハンドルの動きをゆっくりに
+  c.steer += clamp(st - c.steer, -rate * dt, rate * dt);
+  // 舵角 → 自転車モデルの旋回(ヨーレート)。限界に近づくほど舵が効かなくなる(アンダーステア)
+  const latRatio = clamp(Math.min(Math.abs(c.aLat), MU_LAT * G_ACC) / (MU_LAT * G_ACC) - .2, 0, .8) / .8;   // 横Gが限界の2割までは舵の補正なし(駐車場の速度で最小回転半径どおりに回れる)
+  const delta = Math.sign(c.steer) * Math.pow(Math.abs(c.steer), H.steerExp) * (1 - UNDERSTEER * latRatio) * MAX_STEER * lerpTable(STEER_SF, av * 3.6);
+  const lowBump = smooth((av - 2.5) / 3) * (1 - smooth((av - 8) / 4));   // 約10〜40km/hの低速域(駐車場より速く、ワインディングより遅い)で1になる山形
+  const yawKin = vf / WHEELBASE * Math.tan(delta) * (1 - H.lowSpeedPush * lowBump * Math.abs(c.steer)) * (1 + H.trailBrake * (c.brakeF || 0));   // 低速で切り込むと押し出される / ブレーキを残すと鋭く入る
+  // 摩擦円: 加減速に使っているグリップのぶん、横に使えるグリップが減る
+  c.aLongF += (Math.min(c.accel > 0 ? c.accel * H.driveLat : -c.accel * H.brakeLat, BRAKE_MAX * .95) - c.aLongF) * Math.min(1, dt * 10);   // 加速で削られる横グリップ(AWDは4輪で受け持つので小さい)
+  // 荷重移動: サスペンションの分だけ遅れて、加速で後ろ・減速で前に荷重が移る。左右に偏るほど軸全体のグリップも落ちる
+  c.accS += (c.accel * (vf >= 0 ? 1 : -1) - c.accS) * Math.min(1, dt * 8);
+  c.Ff = clamp(FRONT_STATIC - K_LONG * (c.accS > 0 ? c.accS * H.accelShift : c.accS), .3, .9);
+  const loadF = c.Ff / FRONT_STATIC, loadR = (1 - c.Ff) / (1 - FRONT_STATIC);
+  const tau = Math.min(K_LAT * Math.abs(c.aLat), .6);
+  const base = (c.grass ? .5 : 1) * (MU_LAT * G_ACC + H.downforce * av * av) * lerp(H.lowGrip, 1, smooth(av / 25)) * (1 - LAT_LOSS_K * tau * tau) * Math.sqrt(1 - (c.aLongF / BRAKE_MAX) ** 2);
+  const capF = base * Math.pow(loadF, LOAD_SENS);             // 前軸が出せる横加速度の上限(荷重が増えれば上がる)
+  let capR = Math.min(Math.max(base * Math.pow(loadR, LOAD_SENS), REAR_MIN * MU_LAT * G_ACC), hb ? 4.5 : 1e9);   // 後軸(サイドブレーキで大きく低下)
+  c.capF = capF; c.capR = capR;
+  const capR0 = capR, cap = Math.min(capF, capR0 * H.yawRearMargin);   // 舵の効きが頭打ちになる基準(前軸。GT-Rは後軸の限界もこえない)
+  const x = Math.abs(yawKin) * av / cap;                      // 要求する横加速度 ÷ 使える限界
+  // 限界の進入(ブレーキを残して速く切り込んだとき)だけ、一瞬リアが流れて車が回り込み、すぐ収まる(4WD制御が前へ駆動力を送る)
+  c.rotT = Math.max(0, (c.rotT || 0) - dt); c.rotCool = Math.max(0, (c.rotCool || 0) - dt);
+  if (H.limitRot > 0 && c.rotT <= 0 && c.rotCool <= 0 && x > 1.15 && (c.brakeF || 0) > .25 && av > 22 && Math.abs(c.steer) > .5) { c.rotT = H.rotDur; c.rotCool = 1.6; }
+  const rotK = c.rotT > 0 ? H.limitRot * Math.sin(Math.PI * (1 - c.rotT / H.rotDur)) : 0;   // 山形: すっと流れてすっと収まる
+  capR *= 1 - rotK; c.capR = capR;
+  const f = 1 / Math.pow(1 + Math.pow(x, H.knee), 1 / H.knee);          // 70%あたりから少しずつ頭打ちになり、切り込んでも限界いっぱい(減点なし)
+  const yawT = yawKin * f * (hb ? 1.45 : 1) * (1 + rotK);
+  c.yaw += (yawT - c.yaw) * Math.min(1, dt * M.yawResp * H.yawResp / 9);
+  c.aLat = c.yaw * vf;                                        // 横加速度(左旋回が正)
+  c.h += c.yaw * dt;
+  // --- 車体座標に分解し直す(向きを変えた分だけ横滑りが生まれる)
+  Fx = Math.sin(c.h); Fz = Math.cos(c.h);
+  let Lx = Math.cos(c.h), Lz = -Math.sin(c.h);
+  vf = c.vx * Fx + c.vz * Fz; let vl = c.vx * Lx + c.vz * Lz;
+  c.h += Math.atan2(vl, Math.max(av, 3)) * (hb ? .4 : 1.6) * clamp(capR / (MU_LAT * G_ACC), .3, 1) * Math.min(av / 8, 1) * dt;   // 進行方向に車体が揃おうとする力(後軸のグリップが薄いほど弱い)
+  // --- 駆動・減速(変速なし)
+  let a = 0, drive = 0;
+  // バッテリー残量20%以下で出力が下がり、12%以下では最大65%(発電エンジンの出力だけで走る)
+  const powerLimit = c.dead ? 0 : 1;                           // 残量が少なくても出力は落とさない(裏で自動発電する)。バッテリーが完全に切れたときだけ走行不可
+  const res = DRAG * vf * vf;
+  let torqueCut = 1;                                            // ガソリン車: 変速のあいだは駆動力が途切れる(電動系は変速なし)
+  if (VEH.powertrain.type === 'ice') {
+    const tops = VEH.powertrain.gears; let g = c.gearIdx ?? 0;
+    while (g < tops.length - 1 && vf > tops[g] * .95) g++;      // アップ: 各ギアの上限の95%
+    while (g > 0 && vf < tops[g - 1] * .70) g--;                // ダウン: 一つ下のギアの上限の70%まで落ちたら(往復しないよう切り替え速度をずらす)
+    if (c.gearIdx !== undefined && g !== c.gearIdx && vf > 1) c.shiftT = VEH.powertrain.shiftTime;
+    c.gearIdx = g; c.gear = g + 1; c.shiftT = Math.max(0, (c.shiftT || 0) - dt);
+    if (c.shiftT > 0) torqueCut = 0;
+  }
+  c.sys = 0;
+  if (c.p > .001) {
+    const aDrive = vf >= VMAX ? 0 : (ACC_TABLE ? lerpTable(ACC_TABLE, vf * 3.6) : ACC0 * (1 - Math.pow(vf / VMAX, ACC_EXP))) * driveMult(vf);
+    const thrSys = isHy() ? hyThrottle(c, thrEff, dt) : thrEff; c.sys = thrSys;                                           // THS/e:HEVは、駆動力がどの経路から来るか(モーター/エンジン参加/直結)で立ち上がり方が変わる
+    drive = thrSys * (aDrive + res + .3) * powerLimit * torqueCut;   // 抵抗ぶんを足しておき、全開なら差し引きで実測どおりの加速になる
+    a += drive;
+  }
+  if (nitroOn) { a += 11 * Math.max(0, 1 - vf / 95); c.nitro = Math.max(0, c.nitro - dt * .22); }
+  else if (alive) c.nitro = Math.min(1, c.nitro + NITRO_REGEN * dt);                  // 使っていない間は時間で回復(すり抜けでも回復)
+  vf += a * dt;
+  // アクセルオフの減速: 通常は一定(1.4)、e-Pedalは速度別の表。踏んでいる量に応じて0.3(走行抵抗)へ寄せる
+  const hyCar = isHy(), hyPt = VEH.powertrain;
+  const coastBase = hyCar ? lerpTable((decelSel === 'B' && hyPt.coastB) || hyPt.coastD || hyPt.coast, av * 3.6) * M.regen : (ePedal && !c.dead) ? epedalDecel(Math.abs(vf)) * M.regen : COAST;   // バッテリー切れでは回生(e-Pedal)も効かない
+  const coastConst = .3 + (coastBase - .3) * (1 - (c.dead ? 0 : c.p)) * ((ePedal || hyCar) ? c.coast : 1);
+  let dec = DRAG * vf * vf + (vf !== 0 ? coastConst : 0);
+  // カーブ中はブレーキの効きを抑えて、曲がるためのグリップを残す(ABS・横滑り防止装置の旋回優先。キーは全開か0なので、これがないと踏んだ瞬間に曲がれなくなる)
+  const latUse = Math.min(1, Math.abs(c.aLat) / (MU_LAT * G_ACC));
+  const aBrake = vf > .4 ? BRAKE_MAX * (c.grass ? .6 : 1) * (BRAKE_FADE ? lerpTable(BRAKE_FADE, av * 3.6) : 1) * Math.pow(c.b, H.brakeExp) * Math.sqrt(Math.max(.15, 1 - latUse * latUse)) : 0;
+  c.brakeF = aBrake / BRAKE_MAX;   // 軽く踏めば穏やか、強く踏めば最大9.0
+  dec += aBrake;
+  if (vf <= .4 && c.p < .02 && c.b > .05) vf = Math.max(vf - 5.5 * Math.min(1, c.b * 2) * dt, -9);   // バック
+  if (hb) dec += 3.5;
+  if (c.grass) dec += 1.0 + av * .03;                            // 芝の上は転がり抵抗が大きく、どんどん減速する
+  if (!alive && play) dec += 8;
+  c.accelCmd = a - Math.sign(vf) * dec;                        // 前後の加減速(荷重移動用)。横滑りのこすれは含めない
+  c.tcb = H.tcb > 0 ? lowBump * Math.abs(c.steer) : 0; dec += H.tcb * c.tcb;                  // 低速で切り込むとフロントが路面を引きずって減速する
+  dec += Math.min(Math.abs(vl), 12) * .25;
+  vf -= Math.sign(vf) * Math.min(dec * dt, Math.abs(vf));
+  // --- バッテリー: 加速で消費 / 減速(回生ブレーキ・アクセルオフ)で回復 / 発電エンジンで充電
+  {
+    const use = Math.abs(vf) * drive / 120;                                                     // 消費(全開の中速域で約1)
+    const regenDec = aBrake + Math.max(0, coastConst - .3);
+    const regen = (vf > 1 && !c.dead) ? regenDec * vf / 120 * .6 : 0;                            // 回生の効率60%
+    c.regenOn = regen > .002 && c.p < .05;
+    if (hyCar) c.batt = clamp(c.batt + (-use * hyUseShare(c) + regen) * .03 * dt + c.chgRate * dt, 0, 1);   // THS/e:HEV: エンジンが駆動や直結を受け持つぶん電池の消費が減る。発電はエンジン制御(hybridStep)の指示どおり
+    else if (VEH.powertrain.type !== 'ice') c.batt = clamp(c.batt + (-use + regen) * .03 * dt + (c.charging ? c.gen * GEN_CHARGE * dt : c.assist ? c.gen * GEN_ASSIST * dt : 0), 0, 1);   // 充電は「自動発電中」が主。強い加速の補助中は消費を少し肩代わりするだけ
+    if (VEH.powertrain.type === 'series' && !c.dead && c.batt <= .0005) { c.dead = true; c.gen = 0; popup('バッテリー切れ! 走行不可', 'close'); }   // 万一の全放電
+    if (c.dead && play) {                                                                        // 走行不可のまま止まったら終了
+      c.deadT = Math.hypot(c.vx, c.vz) < .6 ? c.deadT + dt : 0;
+      if (c.deadT > 2 && state === 'play') { state = 'over'; overT = 2; showOver('バッテリー切れ', '走行不可になりました。<br>スコア <b>' + Math.round(score) + '</b>　走行 <b>' + (dist / 1000).toFixed(2) + '</b> km'); }
+    }
+  }
+  // --- タイヤのグリップ(限界を超えるとドリフト)
+  const gripA = Math.min(capF, capR);                          // 車全体が横に曲がれる量は、弱いほうの軸で決まる(後軸が先に切れると横滑り)
+  const lim = gripA * dt;
+  vl += clamp(-vl * (1 - Math.exp(-9 * dt)), -lim, lim);
+  c.slip = Math.abs(vl);
+  c.vx = Fx * vf + Lx * vl; c.vz = Fz * vf + Lz * vl;
+  c.x += c.vx * dt; c.z += c.vz * dt;
+  wallBox(c);                                                        // 見えない壁(サーキットと街の外周)
+  if (c.prevVf > .3 && vf < .05 && c.b > .3) c.pitchV = (c.pitchV || 0) - H.stopKick * clamp(-c.accel / G_ACC, 0, 2);   // 止まる瞬間にブレーキの力が抜けて、前のめりの車体が起き上がる(カックン)
+  c.accel = c.accelCmd; c.prevVf = vf;
+  c.wheelRot += vf * dt / .34;
+
+  // --- 道路との関係
+  const loc = isCity() ? { s: 0, d: 0, h: c.h, y: 0, sl: 0 } : locate(c.x, c.z, c.s);
+  if (isCity()) { c.s = 0; c.d = 0; c.roadH = c.h; c.sl = 0; c.y = 0; c.grass = false; scraping = false; railCool = Math.max(0, railCool - dt); cityStepPlayer(c, dt); } else {
+  const sJump = loc.s - c.s;
+  c.s = loc.s; c.d = loc.d; c.roadH = loc.h; c.sl = loc.sl;
+  if (course === 'tsukuba' && Math.abs(loc.d) < ROAD_HALF + 3 && c.s > c.prog) c.prog = c.s;   // 道の上にいるときだけ進みを認める(コース外でs が飛んでも順位は変わらない。ショートカットは道に戻った時点で加算)
+  wallRoad(c, loc);                                                                     // 見えない壁(道の左右・スタートの後ろ)
+  c.y = loc.y - (Math.abs(loc.d) > ROAD_HALF ? dish(Math.abs(loc.d), loc.y) : 0);       // コース外は地面(土手)の高さに合わせる
+  if (course === 'tsukuba' && sJump > 60 && state === 'play') { popup('ショートカット! +' + Math.round(sJump) + 'm', 'close'); for (const t of traffic) t.prevRel = t.s - c.s; }   // 大きく進んだ分は順位・周回に反映される
+  // --- ガードレール: 壊れていない区画は壁。速く(約32km/h以上で壁に向かって)突っ込むと突き破り、外の芝へ出られる
+  scraping = false; railCool = Math.max(0, railCool - dt);
+  const ad = Math.abs(c.d), side = c.d >= 0 ? 1 : -1, nCar = Math.round(c.s / STEP), intact = !railBroken(side, nCar);
+  if (c.outside === undefined) c.outside = ad > ROAD_HALF;
+  if (!intact || ad > 10.5) c.outside = ad > ROAD_HALF; else if (ad < 7) c.outside = false;   // 壁のこちら側/向こう側(壁が壊れた場所を通ると入れ替わる)
+  const nx = Math.cos(loc.h) * side, nz = -Math.sin(loc.h) * side, dirIn = c.outside ? -1 : 1;
+  const contact = intact ? (c.outside ? RAIL_OUT - ad : ad - CAR_LIM) : 0;                   // 壁にめり込んだ量
+  if (contact > 0) {
+    const vInto = dirIn * (c.vx * nx + c.vz * nz);                                            // 壁に向かう速さ
+    if (vInto >= BREAK_V) {
+      breakRail(side, nCar, c.x + nx * dirIn * .9, c.y + .4, c.z + nz * dirIn * .9, c.vx, c.vz, vInto / 20);
+      crashFx(c.x + nx * dirIn * .9, c.y + .6, c.z + nz * dirIn * .9, -nx * dirIn, -nz * dirIn, vInto * 1.2, true);
+      c.vx -= nx * dirIn * vInto * .4; c.vz -= nz * dirIn * vInto * .4; c.vx *= .96; c.vz *= .96;   // 突き破った分だけ減速
+      damage(vInto * 1.0);
+    } else {
+      c.x -= nx * dirIn * contact; c.z -= nz * dirIn * contact; c.d = side * (c.outside ? RAIL_OUT : CAR_LIM);
+      if (vInto > 0) {
+        c.vx -= nx * dirIn * vInto * 1.25; c.vz -= nz * dirIn * vInto * 1.25;
+        if (!c.outside) c.h += angDiff(loc.h, c.h) * Math.min(.5, vInto * .05);
+        if (vInto > 2 && railCool <= 0) { railCool = .35; crashFx(c.x + nx * dirIn * .9, c.y + .6, c.z + nz * dirIn * .9, -nx * dirIn, -nz * dirIn, vInto * 1.1, true); damage(vInto * 1.2); shake = Math.min(1.2, shake + vInto / 25); sfxCrash(clamp(vInto / 20, 0, 1)); $('flash').style.opacity = clamp(vInto / 40, .1, .4); }
+      }
+      const sp = Math.hypot(c.vx, c.vz);
+      c.vx *= 1 - .9 * dt; c.vz *= 1 - .9 * dt;
+      if (sp > 5) {
+        scraping = true; damage(dt * sp * .03);
+        if (Math.random() < .7) emit(c.x + nx * dirIn * .9, c.y + .4, c.z + nz * dirIn * .9, rnd(-3, 3) - nx * dirIn * 2, rnd(1, 4), rnd(-3, 3) - nz * dirIn * 2, rnd(.25, .5), rnd(.12, .25), 0, 0xffa030, true, 12);
+      }
+    }
+  }
+  c.grass = Math.abs(c.d) > ROAD_HALF + .15;                                                  // 舗装の外(芝)を走っているか
+  if (Math.abs(c.d) > 11) collideTrees(c, dt);
+  }
+  // --- 車体の傾き・見た目
+  const kmh = Math.hypot(c.vx, c.vz) * 3.6; maxKmh = Math.max(maxKmh, kmh);
+  const rel = Math.cos(c.h - loc.h);
+  const pT = (-Math.atan(loc.sl * rel)) - clamp(c.accel * H.pitchGain, -.07, .05);            // 前後の傾きの目標(加速で後ろ下がり・ブレーキで前のめり)
+  c.pitchV = (c.pitchV || 0) + (H.pitchFreq * H.pitchFreq * (pT - c.pitch) - 2 * H.pitchZeta * H.pitchFreq * (c.pitchV || 0)) * dt;   // ばね+ダンパー: 目標が急に変わると行き過ぎて揺り戻す
+  c.pitch += c.pitchV * dt;
+  const rollT = clamp(c.aLat / G_ACC * ROLL_DEG_PER_G * ROLL_VIEW, -H.rollMax, H.rollMax) * Math.PI / 180;   // 横Gに比例して傾き、少し遅れて追従
+  c.roll += (rollT - c.roll) * (1 - Math.exp(-H.rollRate * dt));
+  if (c.grass && av > 3) { const k = Math.min(1, av / 20); c.roll += rnd(-1, 1) * .012 * k; c.pitch += rnd(-1, 1) * .008 * k; }   // 芝の上はガタガタ揺れる
+  carMesh.position.set(c.x, c.y + (c.hop || 0), c.z); carMesh.rotation.set(c.pitch + (c.tumP || 0), c.h, c.roll + (c.tumR || 0));
+  for (const w of PLAYER.wheels) { w.m.rotation.x = c.wheelRot; if (w.front) w.piv.rotation.y = c.steer * .4; }
+  PLAYER.steerWheel.rotation.z = -c.steer * 1.3;
+  const braking = c.b > .05 && vf > .4;
+  PLAYER.tailMat.color.setHex(braking ? 0xff2a2a : 0x8a1010);
+  PLAYER.tailGlows.forEach(g => { g.material.opacity = braking ? 1 : .45; g.scale.setScalar(braking ? 2.2 : 1.3); });
+  PLAYER.flames.forEach(f => { f.visible = nitroOn; if (nitroOn) f.scale.set(1, 1, .7 + Math.random() * .7); });
+  // --- 煙(ドリフト)・ニトロの火花
+  if (c.slip > 3 && Math.abs(vf) > 5) for (const sx of [.85, -.85]) if (Math.random() < .8) {
+    const px = c.x - Fx * PLAYER.len * .32 + Lx * sx, pz = c.z - Fz * PLAYER.len * .32 + Lz * sx;
+    emit(px, c.y + .15, pz, c.vx * .3 + rnd(-.6, .6), rnd(.3, 1.2), c.vz * .3 + rnd(-.6, .6), rnd(.8, 1.3), 1.0, 3.2, 0xdddddd, false);
+  }
+  if (c.grass && av > 4) for (const sx of [.9, -.9]) if (Math.random() < .75) emit(c.x - Fx * PLAYER.len * .3 + Lx * sx, c.y + .15, c.z - Fz * PLAYER.len * .3 + Lz * sx, c.vx * .2 + rnd(-1, 1), rnd(.5, 1.6), c.vz * .2 + rnd(-1, 1), rnd(.6, 1.1), .9, 3, 0xa89868, false);   // 土煙
+  if (nitroOn && Math.random() < .6) emit(c.x - Fx * (PLAYER.len / 2 + .4), c.y + .5, c.z - Fz * (PLAYER.len / 2 + .4), c.vx * .8 + rnd(-1, 1), rnd(-.3, .6), c.vz * .8 + rnd(-1, 1), .25, .5, .8, 0x66aaff, true);
+
+  // --- 得点・ゲーム進行
+  if (play) {
+    dist += Math.max(0, vf) * dt; score += kmh * dt * .05;
+    if (comboT > 0 && (comboT -= dt) <= 0) combo = 0;
+    if (c.health <= 0) { if (overT === 0) { sfxCrash(1); } overT += dt; if (overT > 1.6) gameOver(); }
+  }
+}
+function gameOver() {
+  state = 'over';
+  showOver('クラッシュ!', `スコア <b>${Math.round(score)}</b>　走行 <b>${(dist / 1000).toFixed(2)}</b> km　最高 <b>${Math.round(maxKmh)}</b> km/h` + (course === 'tsukuba' ? `<br>順位 <b>${standings().findIndex(x => x.me) + 1}位 / ${standings().length}</b>` + (bestLap !== null ? `　ベストラップ <b>${fmtLap(bestLap)}</b>` : '') : ''));
+}
+
+/* =====================================================================
+   カメラ(三人称 / 運転席)
+   ===================================================================== */
+let camH = 0;
+const flipQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
+const eyeV = new THREE.Vector3();
+function updateCamera(dt) {
+  if (PLAYER.model) {
+    PLAYER.model.visible = camMode === 0; cockpit.visible = camMode === 1;
+    const target = ghost ? .4 : 1;                               // 貫通中は半透明
+    PLAYER.ghostA += (target - PLAYER.ghostA) * Math.min(1, dt * 10);
+    const solid = PLAYER.ghostA > .98;
+    PLAYER.mats.forEach(m => { const was = m.transparent; m.transparent = !solid; m.opacity = PLAYER.ghostA; m.depthWrite = solid; if (was !== m.transparent) m.needsUpdate = true; });
+  }   // モデルは外から見る時だけ、内装は運転席視点だけ
+  const c = car, speed = Math.hypot(c.vx, c.vz), kmh = speed * 3.6;
+  const velAng = speed > 6 ? Math.atan2(c.vx, c.vz) : c.h;
+  camH += angDiff(c.h + angDiff(velAng, c.h) * .35, camH) * (1 - Math.exp(-5 * dt));
+  shake = Math.max(0, shake - dt * 2.2);
+  const sa = (Math.pow(kmh / 250, 2) * .03 + shake * .12), sx = (Math.random() - .5) * sa, sy = (Math.random() - .5) * sa;
+  const fovT = 66 + Math.min(kmh, 300) * .11 + (nitroOn ? 9 : 0) + (camMode ? 8 : 0);
+  camera.fov += (fovT - camera.fov) * Math.min(1, dt * 4); camera.updateProjectionMatrix();
+  if (camMode === 0) {
+    const dist = PLAYER.cam.dist + speed * .013 + (nitroOn ? .9 : 0), fx = Math.sin(camH), fz = Math.cos(camH);
+    const cy = c.y + (c.hop || 0) * .8;                              // 吹き飛んだときはカメラも少し追いかける
+    camera.position.set(c.x - fx * dist + sx, cy + PLAYER.cam.h + sy, c.z - fz * dist);
+    camera.lookAt(c.x + fx * 9, cy + PLAYER.cam.look - c.pitch * 5, c.z + fz * 9);
+  } else {
+    carMesh.updateMatrixWorld(true);
+    eyeV.copy(PLAYER.eye).applyMatrix4(carMesh.matrixWorld);
+    camera.position.copy(eyeV).add(new THREE.Vector3(sx, sy, 0));
+    camera.quaternion.copy(carMesh.quaternion).multiply(flipQ);
+  }
+  // 背景は常にカメラに追従
+  sky.position.copy(camera.position);
+  sunCore.position.copy(camera.position).addScaledVector(SUN_DIR, 2000);
+  sunHalo.position.copy(sunCore.position);
+  mountains.position.set(camera.position.x, c.y + 60, camera.position.z);
+  ground.position.set(camera.position.x, isCity() ? -.03 : course === 'tsukuba' ? GROUND_Y : c.y - 2.6, camera.position.z);
+  sunLight.position.set(c.x, c.y, c.z).addScaledVector(SUN_DIR, 120); sunLight.target.position.set(c.x, c.y, c.z);
+}
+
+/* =====================================================================
+   スピード線・HUD
+   ===================================================================== */
+function updateFx(dt) {
+  const w = fx.width, h = fx.height, kmh = Math.hypot(car.vx, car.vz) * 3.6;
+  fxc.clearRect(0, 0, w, h);
+  const a = clamp((kmh - 130) / 170, 0, 1) * (nitroOn ? 1.4 : .8);
+  if (a > 0) {
+    fxc.lineWidth = 1.4; const cx = w / 2, cy = h / 2, m = Math.min(w, h);
+    for (let i = 0; i < 46; i++) {
+      const ang = Math.random() * Math.PI * 2, r0 = m * (.38 + Math.random() * .28), r1 = r0 + m * (.08 + a * .18 * Math.random());
+      fxc.strokeStyle = `rgba(255,255,255,${a * .3 * Math.random()})`;
+      fxc.beginPath(); fxc.moveTo(cx + Math.cos(ang) * r0 * 1.3, cy + Math.sin(ang) * r0); fxc.lineTo(cx + Math.cos(ang) * r1 * 1.3, cy + Math.sin(ang) * r1); fxc.stroke();
+    }
+  }
+  const fl = $('flash'); fl.style.opacity = Math.max(0, parseFloat(fl.style.opacity || 0) - dt * 1.6);
+}
+const mini = $('mini'), mctx = mini.getContext('2d'), MINI = 200;
+const miniBase = (() => {                  // コースの形(1周ぶん)を一度だけ描いておく
+  const cv = document.createElement('canvas'); cv.width = cv.height = MINI; const g = cv.getContext('2d');
+  const minX = Math.min(...lapX), maxX = Math.max(...lapX), minZ = Math.min(...lapZ), maxZ = Math.max(...lapZ), pad = 14;
+  const sc = (MINI - pad * 2) / Math.max(maxX - minX, maxZ - minZ), ox = (MINI - (maxX - minX) * sc) / 2 - minX * sc, oz = (MINI - (maxZ - minZ) * sc) / 2 - minZ * sc;
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, MINI, MINI);
+  g.lineJoin = 'round'; g.lineCap = 'round';
+  const path = () => { g.beginPath(); for (let i = 0; i <= LAP_N; i++) { const k = i % LAP_N, x = lapX[k] * sc + ox, y = lapZ[k] * sc + oz; i ? g.lineTo(x, y) : g.moveTo(x, y); } };
+  path(); g.strokeStyle = 'rgba(255,255,255,.28)'; g.lineWidth = 7; g.stroke();
+  path(); g.strokeStyle = 'rgba(90,90,100,.95)'; g.lineWidth = 4.5; g.stroke();
+  g.fillStyle = '#fff'; g.fillRect(lapX[0] * sc + ox - 4, lapZ[0] * sc + oz - 1.5, 8, 3);        // スタートライン
+  return { cv, sc, ox, oz };
+})();
+function drawMini() {
+  if (isCity()) { cityDrawMini(); return; }                       // ミニマップ: コース全体を固定表示し、ライバルは色つきの正方形、自機は黄色の三角で動く
+  if (course !== 'tsukuba') { mini.style.display = 'none'; return; }
+  mini.style.display = 'block'; mctx.clearRect(0, 0, MINI, MINI); mctx.drawImage(miniBase.cv, 0, 0);
+  const { sc, ox, oz } = miniBase;
+  for (const t of traffic) if (t.active && t.rival) {
+    const x = t.x * sc + ox, y = t.z * sc + oz;
+    mctx.fillStyle = '#' + t.color.toString(16).padStart(6, '0'); mctx.fillRect(x - 3.5, y - 3.5, 7, 7);
+    mctx.strokeStyle = 'rgba(0,0,0,.85)'; mctx.lineWidth = 1; mctx.strokeRect(x - 3.5, y - 3.5, 7, 7);
+  }
+  const px = car.x * sc + ox, py = car.z * sc + oz, hx = Math.sin(car.h), hz = Math.cos(car.h);
+  mctx.beginPath(); mctx.moveTo(px + hx * 7, py + hz * 7); mctx.lineTo(px - hx * 4 - hz * 4.5, py - hz * 4 + hx * 4.5); mctx.lineTo(px - hx * 4 + hz * 4.5, py - hz * 4 - hx * 4.5); mctx.closePath();
+  mctx.fillStyle = '#ffd34d'; mctx.fill(); mctx.strokeStyle = '#000'; mctx.lineWidth = 1.2; mctx.stroke();
+}
+const CORNER_LAT = 8.0, CORNER_BRAKE = 5.5;   // カーブ案内: 曲がれる横加速度の目安(曲率テーブルは安全側に大きめなので実際の限界より控えめ)、キー操作の踏み込み遅れを見込んだ余裕のあるブレーキ(m/s²)
+function cornerAdvice() {                    // 前方250mで最も速度を落とす必要があるカーブと、いま踏むべきか
+  let best = null;
+  for (let a = 10; a <= 250; a += 10) {
+    const k = kAt(car.s + a); if (k < 1e-4) continue;
+    const vlim = Math.sqrt(CORNER_LAT / k), allowed = Math.sqrt(vlim * vlim + 2 * CORNER_BRAKE * a);   // allowed: いまからブレーキして間に合う上限速度
+    if (!best || allowed < best.allowed) best = { a, vlim, allowed };
+  }
+  return best;
+}
+const drag = { running: false, t: 0, marks: { 100: null, 200: null, 300: null }, top: 0, s0: 0, peakAcc: 0, peakBrk: 0 };   // ベタ踏み直線: 発進からのタイム
+function updateDrag(dt) {
+  const kmh = Math.hypot(car.vx, car.vz) * 3.6;
+  if (!drag.running && kmh > 3 && state === 'play') { drag.running = true; drag.t = 0; drag.marks = { 100: null, 200: null, 300: null }; drag.top = 0; drag.s0 = car.s; drag.peakAcc = 0; drag.peakBrk = 0; }
+  if (!drag.running) return;
+  drag.t += dt; drag.top = Math.max(drag.top, kmh);
+  drag.peakAcc = Math.max(drag.peakAcc, gDisp.long); drag.peakBrk = Math.min(drag.peakBrk, gDisp.long);
+  for (const k of [100, 200, 300]) if (drag.marks[k] === null && kmh >= k) drag.marks[k] = drag.t;
+  if (kmh < 2 && drag.t > 1) drag.running = false;        // 止まったら計測終了(値は残り、次に動き出すと取り直し)
+}
+const fmtT = t => t === null ? '--' : t.toFixed(2) + 's';
+const gDisp = { long: 0, lat: 0 };                     // 表示用のG(なめらかにしたもの)。前後: 加速が+、ブレーキが−。横: 左旋回が+
+function drawG(dt) {                                    // Gの表示値を更新(数字だけを画面左上に出す)。名前は従来のまま
+  const k = Math.min(1, dt * 12);
+  gDisp.long += (car.accel / G_ACC - gDisp.long) * k; gDisp.lat += (car.aLat / G_ACC - gDisp.lat) * k;
+}
+let hudTick = 0;
+function updateHud() {
+  const kmh = Math.hypot(car.vx, car.vz) * 3.6;
+  $('spd').textContent = Math.round(kmh);
+  $('gear').textContent = (Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5 ? 'R' : VEH.powertrain.type === 'ice' ? String(car.gear || 1) : VEH.powertrain.coastB ? decelSel : 'D') + '  ' + M.name + (ePedal && VEH.powertrain.type !== 'ice' ? '  e-Pedal' : '');
+  $('rpm').style.width = car.out * 100 + '%';
+  { const ht = hyInfoText(); if ($('hyInfo').textContent !== ht) $('hyInfo').textContent = ht; }
+  $('score').textContent = Math.round(score);
+  $('dist').textContent = (dist / 1000).toFixed(2);
+  if (!DAMAGE_ENABLED) { const hb = $('hp').parentElement; if (hb.style.display !== 'none') { hb.style.display = 'none'; hb.nextElementSibling.style.display = 'none'; } }   // 車体ゲージ(と「車体」の文字)を隠す
+  $('hp').style.width = car.health + '%'; $('hp').style.background = car.health > 50 ? '#6f6' : car.health > 25 ? '#fc4' : '#f55';
+  $('nit').style.width = car.nitro * 100 + '%';
+  $('dead').style.display = car.dead ? 'block' : 'none'; if (car.dead) $('dead').textContent = 'バッテリー切れ　走行不可';
+  $('batt').style.width = car.batt * 100 + '%'; $('batt').style.background = car.batt > .3 ? '#5fd4a0' : car.batt > .12 ? '#fc4' : '#f55';
+  if (course === 'tsukuba') {
+    const st = raceState === 'done' && finalRank ? finalRank : standings(), me = st.findIndex(x => x.me);
+    $('pos').textContent = `${me + 1}位 / ${st.length}　LAP ${Math.min(Math.max(lapNo, 1), RACE_LAPS)}/${RACE_LAPS}`;
+    if ((hudTick++ & 3) === 0) {
+      const sp = Math.max(20, Math.hypot(car.vx, car.vz));
+      $('board').style.display = 'block';
+      $('board').innerHTML = st.map((x, i) => `<div${x.me ? ' class="me"' : ''}><i style="background:#${x.color.toString(16).padStart(6, '0')}"></i>${i + 1} ${x.name}${x.me ? '' : '　' + (x.s > car.prog ? '▲' : '▼') + Math.abs((x.s - car.prog) / sp).toFixed(1) + 's'}</div>`).join('');
+    }
+    const adv = state === 'play' ? cornerAdvice() : null, el = $('corner');
+    if (adv && adv.vlim * 3.6 < 120) {
+      const v = Math.hypot(car.vx, car.vz), brake = v > adv.allowed;
+      el.style.display = 'block'; el.classList.toggle('warn', brake);
+      el.textContent = (brake ? 'ブレーキ!　' : '') + `前方カーブ ${adv.a}m　推奨 ${Math.round(adv.vlim * 3.6)}km/h`;
+    } else el.style.display = 'none';
+  } else { $('pos').textContent = ''; $('board').style.display = 'none'; $('corner').style.display = 'none'; }
+  $('stp').textContent = isCity() ? cityHudText() : course === 'smash' ? smashHudText() : course !== 'straight' ? '' :
+    `0-100 ${fmtT(drag.marks[100])}\n0-200 ${fmtT(drag.marks[200])}\n0-300 ${fmtT(drag.marks[300])}\nTOP ${Math.round(drag.top)} km/h   ${((car.s - drag.s0) / 1000).toFixed(2)} km\nG ${(gDisp.long >= 0 ? '+' : '') + gDisp.long.toFixed(2)}   横 ${(gDisp.lat >= 0 ? '+' : '') + gDisp.lat.toFixed(2)}\nMAX +${drag.peakAcc.toFixed(2)} G / ${drag.peakBrk.toFixed(2)} G`;
+  $('lap').textContent = course !== 'tsukuba' ? '' :
+    (lapStart === null ? 'スタートラインを通過すると計測開始' : 'LAP ' + lapNo + '  ' + fmtLap(lapClock - lapStart)) +
+    (lastLap !== null ? '   LAST ' + fmtLap(lastLap) : '') + (bestLap !== null ? '   BEST ' + fmtLap(bestLap) : '');
+  $('combo').textContent = combo > 1 ? `COMBO ×${combo}  (倍率 ${Math.min(1 + (combo - 1) * .5, 10).toFixed(1)})` : '';
+}
+/* =====================================================================
+   ハイブリッドシステム(車種ごとに別の制御)
+   ・セレナ e-POWER(series): エンジンは発電だけ。駆動はモーターのみ(既存)
+   ・ノア THS II(ths): 動力分割。モーターだけで出せる分を超える踏み増しは、エンジンが回って参加した分だけ増える。エンジン回転は要求出力で決まり車速とは無関係
+   ・ステップワゴン e:HEV(ehev): EV / ハイブリッド(エンジンは発電・モーター駆動) / エンジン(高速でロックアップ直結)。直結中だけエンジン回転が車速に同期する
+   ===================================================================== */
+const smooth01 = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+const approach = (cur, tgt, tauUp, tauDn, dt) => cur + (tgt - cur) * Math.min(1, dt / (tgt > cur ? tauUp : tauDn));
+function resetHy() { Object.assign(car, { engOn: false, engRpm: 0, engAuth: 0, lock: 0, lockOn: false, lockRel: 0, pl: 0, engHold: 0, chgRate: 0, sys: 0, thrE: 0, thrA: 0, thrCr: 0, deepT: 0, regenOn: false }); }
+function hyThrottle(c, thr, dt) {          // アクセル量 → 実際の駆動の割合(駆動経路による立ち上がりの違い)
+  const pt = VEH.powertrain, kmh = Math.hypot(c.vx, c.vz) * 3.6, lim = c.batt > .08 ? 1 : .7;
+  if (pt.type === 'ths') {                 // モーター単独ぶんは即座に出る。それを超える踏み増しは、エンジンが回り出した(engAuth)ぶんだけ増える
+    const cap = lerpTable(pt.mCap, kmh) * lim;
+    return Math.min(thr, cap) + Math.max(0, thr - cap) * c.engAuth;
+  }
+  c.pl += (thr - c.pl) * Math.min(1, dt / .32);    // e:HEV: ふだんはモーターがアクセル通りに直接。直結中だけ、踏み増しにエンジンの立ち上がり遅れが出る(戻すときは遅れない)
+  return (thr + (Math.min(thr, c.pl) - thr) * c.lock) * lim;
+}
+const hyUseShare = c => VEH.powertrain.type === 'ths' ? (c.engOn ? 1 - .6 * c.engAuth : 1) : (1 - .9 * c.lock) * (c.engOn ? .55 : 1);   // 電池から出ていく割合
+function hybridStep(dt) {
+  const pt = VEH.powertrain, c = car, kmh = Math.hypot(c.vx, c.vz) * 3.6, thr = c.thrE || 0;
+  c.gen = 0;
+  if (c.batt <= pt.chgOn) c.charging = true; else if (c.batt >= pt.chgOff) c.charging = false;
+  c.thrA += (thr - c.thrA) * Math.min(1, dt / .3);       // 直近のアクセル量(キーボードは入り切りなので、ちょんと踏むだけでエンジンが入らないよう少しならす)
+  c.thrCr += (thr - c.thrCr) * Math.min(1, dt / 1.5);    // 巡航の判定用(1.5秒の平均。軽く踏み続けている=巡航)
+  const thrP = .55 * thr + .45 * c.thrA;                  // エンジンへの出力要求に使うアクセル量(素早く、でもキーの入り切りでガクガクしない)
+  let pe = 0;
+  if (pt.type === 'ths') {
+    const cap = lerpTable(pt.mCap, kmh);
+    const want = c.charging || c.thrA > cap * .7 || (kmh > pt.engSpeed && c.thrA > .08) || kmh > pt.cruiseOn;
+    if (want) { c.engOn = true; c.engHold = pt.hold; } else { c.engHold -= dt; if (c.engHold <= 0) c.engOn = false; }
+    if (c.engOn) {
+      const cruise = kmh > 45 ? .10 + .20 * clamp((kmh - 45) / 100, 0, 1) : 0;
+      pe = clamp(cruise + Math.max(0, thrP - .25) * 1.15 + (c.charging ? .28 : 0), .06, 1);            // 要求出力(踏み込み・巡航・発電要求)
+      c.engRpm = approach(c.engRpm, lerpTable(pt.rpmCurve, pe), .30, .8, dt);                          // 車速より先に回転が上がる(遊星ギアで車速と切り離されている)
+    } else { c.engRpm = approach(c.engRpm, 0, .3, .3, dt); if (c.engRpm < 80) c.engRpm = 0; }
+    c.engAuth = smooth01((c.engRpm - 1300) / 2100);
+    c.chgRate = c.charging && c.engOn ? .018 + .012 * pe : 0;
+    c.lock = 0;
+  } else {
+    c.deepT = thr > .9 ? c.deepT + dt : 0;
+    const cr = c.thrCr;                                                                                    // 巡航(軽く踏み続けている)ときだけ直結。深く踏み続ける・離すとハイブリッドモードへ戻る
+    if (!c.lockOn && kmh > pt.lockOn && cr > .05 && cr < pt.lockPedal - .12 && !c.charging) c.lockOn = true;
+    else if (c.lockOn && (kmh < pt.lockOff || cr > pt.lockPedal || c.deepT > .45 || cr < .02)) c.lockOn = false;
+    c.lock = approach(c.lock, c.lockOn ? 1 : 0, .6, .35, dt);                                              // ゆっくり繋ぐのでショックなし
+    const evOk = !c.charging && c.batt > pt.chgOn + .03 && kmh < pt.evMax && c.thrA < pt.evPedal;
+    const want = c.lockOn || !evOk;
+    if (want) { c.engOn = true; c.engHold = 1.5; } else { c.engHold -= dt; if (c.engHold <= 0) c.engOn = false; }
+    if (c.engOn) {
+      pe = clamp(.06 + thrP * .8 * clamp(kmh / 40, .3, 1) + (c.charging ? .25 : 0), .06, 1);              // 発電の要求(モーターの消費電力+充電)
+      const rpmGen = lerpTable(pt.rpmCurve, pe), rpmLock = kmh * pt.lockRatio;
+      c.engRpm = approach(c.engRpm, rpmGen + (rpmLock - rpmGen) * c.lock, .55, 1.0, dt);                   // ハイブリッドモード: 回転は落ち着いて車速とは無関係。直結が進むにつれて車速に同期していく
+    } else { c.engRpm = approach(c.engRpm, 0, .35, .35, dt); if (c.engRpm < 80) c.engRpm = 0; }
+    c.engAuth = c.lock;
+    c.chgRate = c.charging && c.engOn && c.lock < .5 ? .02 + .01 * pe : (c.lock > .5 && c.batt < pt.chgOff ? .006 : 0);
+  }
+  c.hyMode = pt.type === 'ths' ? (c.engOn ? 'HV' : 'EV') : (c.lock > .5 ? 'ENGINE' : c.engOn ? 'HYBRID' : 'EV');
+  c.out += ((c.sys || 0) - c.out) * Math.min(1, dt * 14);
+}
+function hyInfoText() {                    // 画面のHUD用: いま駆動力がどこから来ているか
+  const pt = VEH.powertrain; if (pt.type === 'ice') return '';
+  const rpm = Math.round(car.engRpm / 50) * 50, rg = car.regenOn ? '　回生' : '';
+  if (pt.type === 'series') { const r = car.gen > .05 ? Math.round(genRpm(car.gen) / 50) * 50 : 0; return (r ? `エンジン: 発電 ${r}rpm → モーターだけで駆動` : 'エンジン停止 → モーターだけで駆動') + rg; }
+  if (pt.type === 'ths') return (car.engOn ? `動力分割: エンジン ${rpm}rpm ＋ モーター` : 'EV走行(エンジン停止)') + rg;
+  if (pt.type === 'ehev') return (car.lock > .5 ? `エンジンモード: エンジン直結 ${rpm}rpm` : car.engOn ? `ハイブリッド: エンジンは発電 ${rpm}rpm → モーター駆動` : 'EVモード(エンジン停止)') + rg;
+  return rg;
+}
+const GEN_RPM = [[.02, 900], [.3, 1500], [.6, 2500], [1, 4500]];   // 発電エンジンの回転: アイドル / 通常発電 / 強加速・低SOC
+function genRpm(g) {
+  if (g <= GEN_RPM[0][0]) return GEN_RPM[0][1];
+  for (let i = 1; i < GEN_RPM.length; i++) if (g <= GEN_RPM[i][0]) { const [x0, y0] = GEN_RPM[i - 1], [x1, y1] = GEN_RPM[i]; return y0 + (y1 - y0) * (g - x0) / (x1 - x0); }
+  return GEN_RPM[GEN_RPM.length - 1][1];
+}
+function updateRpm(dt) {                 // 電動系: モーター出力(変速なし)。ガソリン車: 変速に応じたエンジン回転数
+  const vf = car.vx * Math.sin(car.h) + car.vz * Math.cos(car.h), pt = VEH.powertrain;
+  if (pt.type === 'ice') {
+    const g = (car.gear || 1) - 1, ratio = clamp(vf / pt.gears[g], 0, 1.02), span = pt.redline - pt.idle;
+    let target = pt.idle + span * ratio;
+    if (car.thr > .05 && ratio < .25) target = Math.max(target, pt.idle + span * .35 * car.thr);       // 発進で空ぶかし気味に上がる
+    if (car.shiftT > 0) target = pt.idle + (target - pt.idle) * .55;                                     // 変速中は回転が落ちる
+    car.rpm += (target - car.rpm) * Math.min(1, dt * 14); car.out = clamp((car.rpm - pt.idle) / span, 0, 1); car.gen = 0;
+    return;
+  }
+  if (isHy()) { hybridStep(dt); return; }
+  const t = car.thr * clamp(1 - vf / VMAX, 0, 1);
+  car.out += ((car.dead ? 0 : t) - car.out) * Math.min(1, dt * 14);
+  // 発電エンジンの回転: 加速を求めると遅れて上がり、離してもしばらく残る(車速とは直結しない)
+  const kmh = Math.hypot(car.vx, car.vz) * 3.6;
+  if (pt.type === 'series') { if (car.batt <= CHARGE_ON) car.charging = true; else if (car.batt >= CHARGE_OFF) car.charging = false; } else car.charging = false;   // 20%以下で自動発電を始め、65%まで続ける
+  const chargeGen = car.charging ? (car.batt < .1 ? 1 : .7) : 0;                                    // 自動発電中のエンジンの出力(残量がかなり少ないときは全開)                                        // 残量が減るほどエンジンがかかる(停車中でも発電)
+  const demand = car.thr > .05 ? (.4 + .6 * (car.out * .75 + Math.min(kmh / 190, 1) * .25)) * M.engine : 0;
+  // バッテリーが十分あるうちはモーターだけで走る(エンジンは止まったまま)。エンジンがかかるのは、①残量が20%以下(65%まで自動発電) ②残量が少なめ(モードごとのengStart-15%以下)のとき強い加速をした間だけ
+  const heavy = car.thr > .6 && kmh > 40;
+  const assistAt = M.engStart - .15;                                                                   // NORMALなら40%、SPORTは55%、ECOは23%(ほぼ自動発電だけ)
+  if (heavy && car.batt < assistAt) car.assist = true; else if (!heavy || car.batt > assistAt + .05) car.assist = false;
+  const gt = (pt.type !== 'series' || car.dead) ? 0 : Math.max(car.assist ? demand : 0, chargeGen);
+  car.gen += (gt - car.gen) * Math.min(1, dt * (gt > car.gen ? 2.5 : .7));
+}
+
+/* =====================================================================
+   都市マップ: 信号のある交差点・駐車場・高速の合流路・街を走るAI交通
+   座標はワールド(x=右、z=下)。左側通行。道は東西3本×南北4本の格子(道幅14m)で、外側は「ゲート」(交通の出入口)
+   ===================================================================== */
+const CITY_XS = [-60, 0, 90, 180, 270, 330], CITY_ZS = [-60, 0, 90, 180, 240];   // 通りの座標(両端はゲート)
+const CITY_IW = 14, CITY_LANE = 3.5, CITY_CYCLE = 24;
+const HW = { A: -140, B: -143.5, ACC: -147, X0: -60, X1: 330, ACC_END: 80 };      // 合流路: 本線2車線(A,B)+左側の加速車線(ACC)。加速車線は x=80 で行き止まり
+const LOT = { x0: 187, x1: 263, z0: 97, z1: 173, aisle: 135, slotW: 2.6, slotL: 5.2, n: 26 };   // 駐車場(1ブロックぶん)
+const CITY_START = { x: -25, z: 86.5, h: Math.PI / 2 };
+const CITY_WARPS = [
+  { name: '市街地', x: -25, z: 86.5, h: Math.PI / 2 },
+  { name: '駐車場', x: 225, z: 103, h: 0 },
+  { name: '合流路(加速車線)', x: -40, z: -147, h: Math.PI / 2 },
+];
+const PK_ROUNDS = [                                   // 駐車ミッションの条件(成功した回数で進む。dx: 中心からの許容ずれ m、ang: 枠との角度の許容 rad、mode: any/front(前向き)/back(バック))
+  { dx: .5, ang: .12, mode: 'any', text: 'この枠に停める(向きは自由)' },
+  { dx: .5, ang: .12, mode: 'any', text: 'この枠に停める(向きは自由)' },
+  { dx: .4, ang: .10, mode: 'front', text: 'この枠に「前向き」で停める' },
+  { dx: .4, ang: .10, mode: 'back', text: 'この枠に「バック」で停める' },
+  { dx: .3, ang: .08, mode: 'back', text: 'この枠に「バック」で、ぴったり停める' },
+];
+const city = { group: null, marker: null, rule: PK_ROUNDS[0], lotT: 0, edges: [], inters: [], aabbs: [], poles: [], slots: [], target: -1, sigs: [], clock: 0, stats: { park: 0, merge: 0, viol: 0 }, parkT: 0, parkCool: 0, mergeT: 0, onAccel: false, warpI: 0, sl: new Map(), mini: null };
+function isCity() { return course === 'city'; }
+/* ---------- 世界の端の見えない壁 ---------- */
+let wallT = -1e9;
+function wallFeedback(c) { const now = performance.now(); if (now - wallT > 3500) { wallT = now; popup('ここから先は行けません'); } shake = Math.min(.8, shake + .15); }
+function wallRoad(c, loc) {                              // 公道・直線・破壊ステージ: 道の中心から86m(芝の端)より外と、スタートの後ろには出られない
+  if (course === 'tsukuba' || isCity()) return;
+  const DL = 86; let hit = false;
+  if (Math.abs(loc.d) > DL) {
+    const sg = Math.sign(loc.d), ex = Math.abs(loc.d) - DL, Lx = Math.cos(loc.h) * sg, Lz = -Math.sin(loc.h) * sg;
+    c.x -= Lx * ex; c.z -= Lz * ex; const vo = c.vx * Lx + c.vz * Lz; if (vo > 0) { c.vx -= Lx * vo * 1.3; c.vz -= Lz * vo * 1.3; }
+    loc.d = sg * DL; hit = true;
+  }
+  if (loc.s < 4) {
+    const Tx = Math.sin(loc.h), Tz = Math.cos(loc.h), ex = 4 - loc.s; c.x += Tx * ex; c.z += Tz * ex;
+    const vb = c.vx * Tx + c.vz * Tz; if (vb < 0) { c.vx -= Tx * vb * 1.3; c.vz -= Tz * vb * 1.3; } hit = true;
+  }
+  if (hit) wallFeedback(c);
+}
+let WALL_BOX = null;
+function wallBox(c) {                                     // サーキットは全体の外側110m、街は外周30mが壁
+  if (course !== 'tsukuba' && !isCity()) return;
+  if (!WALL_BOX) WALL_BOX = {
+    tsukuba: { x0: Math.min(...lapX) - 110, x1: Math.max(...lapX) + 110, z0: Math.min(...lapZ) - 110, z1: Math.max(...lapZ) + 110 },
+    city: { x0: CITY_XS[0] - 30, x1: CITY_XS[5] + 30, z0: CITY_ZS[0] - 30, z1: CITY_ZS[4] + 30 },
+  };
+  const b = course === 'tsukuba' ? WALL_BOX.tsukuba : WALL_BOX.city; let hit = false;
+  if (c.x < b.x0) { c.x = b.x0; if (c.vx < 0) c.vx *= -.3; hit = true; } else if (c.x > b.x1) { c.x = b.x1; if (c.vx > 0) c.vx *= -.3; hit = true; }
+  if (c.z < b.z0) { c.z = b.z0; if (c.vz < 0) c.vz *= -.3; hit = true; } else if (c.z > b.z1) { c.z = b.z1; if (c.vz > 0) c.vz *= -.3; hit = true; }
+  if (hit) wallFeedback(c);
+}
+   // 街の世界(道路チャンクを使わない)を使うコース
+const angNorm = a => { a %= Math.PI * 2; if (a < 0) a += Math.PI * 2; return a; };
+
+/* ---------- 道のグラフ ---------- */
+function cityBuildGraph() {
+  const E = city.edges; E.length = 0;
+  const mk = (ax, az, bx, bz, axis, fromInner, toInner, off = CITY_LANE) => {
+    const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz), h = Math.atan2(dx, dz);
+    E.push({ ax, az, bx, bz, h, len, axis, fromInner, toInner, dx: dx / len, dz: dz / len, lx: Math.cos(h), lz: -Math.sin(h), off, u0: fromInner ? CITY_IW / 2 : 0, u1: toInner ? len - CITY_IW / 2 : len, next: {} });
+  };
+  for (let i = 0; i < 3; i++) { const z = CITY_ZS[1 + i]; for (let k = 0; k < 5; k++) { const x0 = CITY_XS[k], x1 = CITY_XS[k + 1], fi = k >= 1, ti = k + 1 <= 4; mk(x0, z, x1, z, 'EW', fi, ti); mk(x1, z, x0, z, 'EW', ti, fi); } }
+  for (let j = 0; j < 4; j++) { const x = CITY_XS[1 + j]; for (let k = 0; k < 4; k++) { const z0 = CITY_ZS[k], z1 = CITY_ZS[k + 1], fi = k >= 1, ti = k + 1 <= 3; mk(x, z0, x, z1, 'NS', fi, ti); mk(x, z1, x, z0, 'NS', ti, fi); } }
+  for (const e of E) {                                   // 交差点の先: 直進と左折
+    for (const f of E) {
+      if (f === e || Math.abs(f.ax - e.bx) > .01 || Math.abs(f.az - e.bz) > .01) continue;
+      const dh = angNorm(f.h - e.h);
+      if (dh < .01 || dh > Math.PI * 2 - .01) e.next.straight = f; else if (Math.abs(dh - Math.PI / 2) < .01) e.next.left = f;
+    }
+  }
+  city.inters.length = 0;
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) city.inters.push({ x: CITY_XS[1 + j], z: CITY_ZS[1 + i], off: (i * 7 + j * 5) % CITY_CYCLE });
+  // 合流路(一方通行・東向き)の本線の車線(信号なし)
+  city.interMap = new Map(city.inters.map(i => [i.x + ',' + i.z, i]));
+  city.hw = [HW.A, HW.B].map(z => ({ ax: HW.X0, az: z, bx: HW.X1, bz: z, h: Math.PI / 2, len: HW.X1 - HW.X0, axis: 'HW', fromInner: false, toInner: false, dx: 1, dz: 0, lx: 0, lz: -1, off: 0, u0: 0, u1: HW.X1 - HW.X0, next: {}, hw: true }));
+}
+function citySig(axis, off) {                            // 信号の状態 'G'青 / 'Y'黄 / 'R'赤(南北と東西は交互。全赤の間をはさむ)
+  const p = (city.clock + off) % CITY_CYCLE, q = axis === 'NS' ? p : (p + 12) % CITY_CYCLE;
+  return q < 9 ? 'G' : q < 11 ? 'Y' : 'R';
+}
+function cityPose(S, out) {                              // AIの状態 → 位置・向き
+  if (S.mode === 'edge') { const e = S.edge; out.x = e.ax + e.dx * S.u + e.lx * e.off; out.z = e.az + e.dz * S.u + e.lz * e.off; out.h = e.h; }
+  else { const c = S.c; if (c.kind === 'straight') { out.x = c.sx + Math.sin(c.h0) * c.p; out.z = c.sz + Math.cos(c.h0) * c.p; out.h = c.h0; } else { const r = CITY_LANE, ph = c.p / r; out.x = c.sx + r * (Math.cos(c.h0) - Math.cos(c.h0 + ph)); out.z = c.sz + r * (Math.sin(c.h0 + ph) - Math.sin(c.h0)); out.h = c.h0 + ph; } }
+  return out;
+}
+const _pose = { x: 0, z: 0, h: 0 };
+
+/* ---------- 見た目の生成 ---------- */
+function cityUV(geo, sx, sy) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * sx, uv.getY(i) * sy); }
+function cityBuild() {
+  cityDispose();
+  const g = city.group = new THREE.Group(); scene.add(g); city.aabbs.length = 0; city.poles.length = 0; city.slots.length = 0; city.sigs.length = 0;
+  const mat = (c, o = {}) => new THREE.MeshLambertMaterial({ color: c, ...o });
+  // --- 路面のテクスチャ
+  const streetTex = canvasTex(512, 512, (ctx, w, h) => {
+    ctx.fillStyle = '#3c3c42'; ctx.fillRect(0, 0, w, h); const rng = mulberry32(21);
+    for (let i = 0; i < 9000; i++) { ctx.fillStyle = rng() < .5 ? `rgba(255,255,255,${rng() * .06})` : `rgba(0,0,0,${rng() * .12})`; ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 2, 1 + rng() * 2); }
+    ctx.fillStyle = '#e6e6e6'; ctx.fillRect(w * .045, 0, 5, h); ctx.fillRect(w * .955 - 5, 0, 5, h);          // 外側線
+    ctx.fillStyle = '#e0b020'; ctx.fillRect(w * .5 - 3, 0, 6, h * .5);                                             // 中央線(破線)
+  });
+  const lotTex = canvasTex(1024, 1024, (ctx, w, h) => {
+    ctx.fillStyle = '#44444a'; ctx.fillRect(0, 0, w, h); const rng = mulberry32(33);
+    for (let i = 0; i < 16000; i++) { ctx.fillStyle = rng() < .5 ? `rgba(255,255,255,${rng() * .05})` : `rgba(0,0,0,${rng() * .12})`; ctx.fillRect(rng() * w, rng() * h, 1 + rng() * 2, 1 + rng() * 2); }
+    const S = w / (LOT.x1 - LOT.x0);                                                                             // px/m
+    ctx.strokeStyle = '#f2f2f2'; ctx.lineWidth = 3;
+    for (const [zc, dir] of [[LOT.aisle - 3 - LOT.slotL / 2, 1], [LOT.aisle + 3 + LOT.slotL / 2, 1]]) {
+      for (let i = 0; i <= LOT.n; i++) { const x = (i * LOT.slotW + 5 - 0) * S; ctx.beginPath(); ctx.moveTo(x, (zc - LOT.slotL / 2 - LOT.z0) * S); ctx.lineTo(x, (zc + LOT.slotL / 2 - LOT.z0) * S); ctx.stroke(); }
+    }
+  });
+  const winTex = canvasTex(128, 128, (ctx, w, h) => {
+    ctx.fillStyle = '#d8d8d0'; ctx.fillRect(0, 0, w, h);
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { ctx.fillStyle = (x + y) % 3 === 0 ? '#e8d890' : '#4a5a70'; ctx.fillRect(x * 32 + 6, y * 32 + 7, 20, 17); }
+  });
+  const matStreet = new THREE.MeshLambertMaterial({ map: streetTex }), matAsph = mat(0x3c3c42), matSide = mat(0xb4b4ac), matLot = new THREE.MeshLambertMaterial({ map: lotTex });
+  const matPaint = new THREE.MeshBasicMaterial({ color: 0xf0f0f0 }), matRoof = mat(0x8a8a86);
+  const W = CITY_IW, ext = { x0: CITY_XS[0], x1: CITY_XS[5], z0: CITY_ZS[0], z1: CITY_ZS[4] };
+  // --- 通り(東西・南北)
+  const street = (x0, z0, x1, z1) => {
+    const alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0), len = alongX ? Math.abs(x1 - x0) : Math.abs(z1 - z0);
+    const geo = new THREE.PlaneGeometry(W, len).rotateX(-Math.PI / 2); cityUV(geo, 1, len / 12);
+    const m = new THREE.Mesh(geo, matStreet); m.position.set((x0 + x1) / 2, .02, (z0 + z1) / 2); if (alongX) m.rotation.y = Math.PI / 2; g.add(m);
+  };
+  for (let i = 0; i < 3; i++) street(ext.x0, CITY_ZS[1 + i], ext.x1, CITY_ZS[1 + i]);
+  for (let j = 0; j < 4; j++) street(CITY_XS[1 + j], ext.z0, CITY_XS[1 + j], ext.z1);
+  // --- 交差点の路面・横断歩道・停止線(白の帯は1つのメッシュにまとめる)
+  const paint = [];
+  const quad = (cx, cz, w, d) => { const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2; paint.push(x0, .04, z0, x0, .04, z1, x1, .04, z1, x0, .04, z0, x1, .04, z1, x1, .04, z0); };
+  for (const it of city.inters) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(W, W).rotateX(-Math.PI / 2), matAsph); m.position.set(it.x, .03, it.z); g.add(m);
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const cx = it.x + dx * (W / 2 + 1.6), cz = it.z + dz * (W / 2 + 1.6);
+      for (let k = -5; k <= 5; k++) { if (dx) quad(cx, it.z + k * 1.2, 3, .6); else quad(it.x + k * 1.2, cz, .6, 3); }   // 横断歩道(しま模様)
+      const sx = it.x + dx * (W / 2 + 4) - dz * CITY_LANE, sz = it.z + dz * (W / 2 + 4) + dx * CITY_LANE;             // 停止線(この側から入ってくる車の車線: 進行方向(-dx,-dz)の左側)
+      if (dx) quad(sx, sz, .5, 6.4); else quad(sx, sz, 6.4, .5);
+    }
+  }
+  const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(paint, 3)); pg.computeVertexNormals(); g.add(new THREE.Mesh(pg, matPaint));
+  // --- ブロック(歩道の島)と建物、駐車場
+  const rng = mulberry32(77), cols = [0xd8d0c4, 0xc8ccd4, 0xd4c4b8, 0xb8c4c8, 0xd0d4c0, 0xc4b8c8, 0xe0d8c0];
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) {
+    const x0 = CITY_XS[1 + c] + W / 2, x1 = CITY_XS[2 + c] - W / 2, z0 = CITY_ZS[1 + r] + W / 2, z1 = CITY_ZS[2 + r] - W / 2;
+    if (c === 2 && r === 1) continue;                                                                             // 駐車場のブロック
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, .15, z1 - z0), matSide); slab.position.set((x0 + x1) / 2, .075, (z0 + z1) / 2); g.add(slab);
+    const qx = (x1 - x0 - 6) / 2, qz = (z1 - z0 - 6) / 2;
+    for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) {
+      const bw = qx - 3 - rng() * 5, bd = qz - 3 - rng() * 5, bh = 12 + rng() * 40, bx = x0 + 3 + a * (qx + 6) + qx / 2, bz = z0 + 3 + b * (qz + 6) + qz / 2;
+      const geo = new THREE.BoxGeometry(bw, bh, bd); const uv = geo.attributes.uv;
+      const face = [[bd, bh], [bd, bh], [bw, bd], [bw, bd], [bw, bh], [bw, bh]];                                  // 面(+x,-x,+y,-y,+z,-z)の寸法。窓は約3.2m×3.6m
+      for (let f = 0; f < 6; f++) for (let v = 0; v < 4; v++) { const i = f * 4 + v; if (f === 2 || f === 3) uv.setXY(i, 1, 1); else uv.setXY(i, uv.getX(i) * face[f][0] / 3.2, uv.getY(i) * face[f][1] / 3.6); }
+      const wall = new THREE.MeshLambertMaterial({ map: winTex, color: cols[Math.floor(rng() * cols.length)] });
+      const mesh = new THREE.Mesh(geo, [wall, wall, matRoof, matRoof, wall, wall]); mesh.position.set(bx, bh / 2 + .15, bz); g.add(mesh);
+      city.aabbs.push({ x0: bx - bw / 2, x1: bx + bw / 2, z0: bz - bd / 2, z1: bz + bd / 2 });
+    }
+  }
+  const lot = new THREE.Mesh(new THREE.PlaneGeometry(LOT.x1 - LOT.x0, LOT.z1 - LOT.z0).rotateX(-Math.PI / 2), matLot);
+  lot.position.set((LOT.x0 + LOT.x1) / 2, .03, (LOT.z0 + LOT.z1) / 2); g.add(lot);
+  cityUV(lot.geometry, 1, 1);
+  // --- 駐車スロット(2列)
+  for (const row of [-1, 1]) for (let i = 0; i < LOT.n; i++) {
+    const cx = LOT.x0 + 5 + LOT.slotW * (i + .5), cz = LOT.aisle + row * (3 + LOT.slotL / 2);
+    city.slots.push({ x: cx, z: cz, taken: false });
+  }
+  // --- 合流路(本線2車線+加速車線)
+  const hwGeo = new THREE.PlaneGeometry(HW.X1 - HW.X0, 7).rotateX(-Math.PI / 2);
+  const hw = new THREE.Mesh(hwGeo, matAsph); hw.position.set((HW.X0 + HW.X1) / 2, .02, (HW.A + HW.B) / 2); g.add(hw);
+  const accGeo = new THREE.PlaneGeometry(HW.ACC_END - HW.X0, 3.6).rotateX(-Math.PI / 2);
+  const acc = new THREE.Mesh(accGeo, matAsph); acc.position.set((HW.X0 + HW.ACC_END) / 2, .021, HW.ACC); g.add(acc);
+  const lane = (x0, x1, z, dashed) => { if (dashed) for (let x = x0; x < x1; x += 9) quad(x + 2, z, 4.5, .25); else quad((x0 + x1) / 2, z, x1 - x0, .25); };
+  const p0 = paint.length; lane(HW.X0, HW.X1, (HW.A + HW.B) / 2, true); lane(HW.X0, HW.ACC_END, (HW.B + HW.ACC) / 2, true); lane(HW.X0, HW.X1, HW.A + 1.85, false); lane(HW.X0, HW.ACC_END, HW.ACC - 1.85, false); lane(HW.ACC_END, HW.X1, HW.B - 1.85, false);
+  const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.Float32BufferAttribute(paint.slice(p0), 3)); pg2.computeVertexNormals(); g.add(new THREE.Mesh(pg2, matPaint));
+  const barrier = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 4.4), mat(0xcc3030)); barrier.position.set(HW.ACC_END + 1.5, .5, HW.ACC); g.add(barrier);   // 加速車線の行き止まり
+  city.aabbs.push({ x0: HW.ACC_END, x1: HW.ACC_END + 3, z0: HW.ACC - 2.2, z1: HW.ACC + 2.2 });
+  for (let i = 0; i < 3; i++) { const post = new THREE.Mesh(new THREE.BoxGeometry(.3, 1.4, .3), mat(0xf0f0f0)); post.position.set(HW.ACC_END - 8 - i * 6, .7, HW.ACC + 2.1); g.add(post); }
+  // --- 信号(各交差点に4本): 支柱+3灯の箱。点灯は色つきの光でも示す
+  const dark = { R: new THREE.MeshBasicMaterial({ color: 0x3a0f0f }), Y: new THREE.MeshBasicMaterial({ color: 0x3a330f }), G: new THREE.MeshBasicMaterial({ color: 0x0f3a1c }) };
+  const lit = { R: new THREE.MeshBasicMaterial({ color: 0xff2a20 }), Y: new THREE.MeshBasicMaterial({ color: 0xffcc22 }), G: new THREE.MeshBasicMaterial({ color: 0x35ff78 }) };
+  const glowCol = { R: 0xff3020, Y: 0xffc820, G: 0x30ff70 };
+  const poleGeo = new THREE.CylinderGeometry(.13, .16, 5.2, 8).translate(0, 2.6, 0), headGeo = new THREE.BoxGeometry(.55, 1.5, .5), bulbGeo = new THREE.BoxGeometry(.32, .32, .1);
+  for (const it of city.inters) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {   // dx,dz: この信号を見る車の進行方向
+    const axis = dx ? 'EW' : 'NS', lx = dz, lz = -dx;                                            // 車の左側(進行方向 (dx,dz) の左は (dz,-dx))
+    const px = it.x - dx * (W / 2 + 1.2) + lx * (W / 2 + .8), pz = it.z - dz * (W / 2 + 1.2) + lz * (W / 2 + .8);
+    const pole = new THREE.Mesh(poleGeo, matRoof); pole.position.set(px, 0, pz); g.add(pole); city.poles.push({ x: px, z: pz, r: .35 });
+    const head = new THREE.Group(); head.position.set(px, 5.6, pz); head.rotation.y = Math.atan2(-dx, -dz); g.add(head);          // 灯は車の方(進行方向の逆向き)を向く
+    head.add(new THREE.Mesh(headGeo, mat(0x1c1c20)));
+    const bulbs = {}; ['R', 'Y', 'G'].forEach((k, i) => { const b = new THREE.Mesh(bulbGeo, dark[k]); b.position.set(0, .48 - i * .48, .28); head.add(b); bulbs[k] = b; });
+    const glow = makeGlow(0xff3020, 3.2, .9); glow.position.set(0, .5, .6); head.add(glow);
+    city.sigs.push({ it, axis, bulbs, glow, dark, lit, glowCol, last: '' });
+  }
+  // --- 目標スロットの印: 緑に光る枠、光の柱、上下にゆれる矢印(遠くからも見える)
+  const mk = new THREE.Group(); mk.visible = false; g.add(mk);
+  const glowMat = t => new THREE.MeshBasicMaterial({ color: 0x40ff90, transparent: true, opacity: t, blending: THREE.AdditiveBlending, depthWrite: false });
+  const fillMat = glowMat(.3), beamMat = glowMat(.35), edgeMat = new THREE.MeshBasicMaterial({ color: 0x8dffb8 });
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(LOT.slotW - .2, LOT.slotL - .3).rotateX(-Math.PI / 2), fillMat); fill.position.y = .07; mk.add(fill);
+  for (const [w, d, x, z] of [[LOT.slotW, .14, 0, LOT.slotL / 2 - .07], [LOT.slotW, .14, 0, -LOT.slotL / 2 + .07], [.14, LOT.slotL, LOT.slotW / 2 - .07, 0], [.14, LOT.slotL, -LOT.slotW / 2 + .07, 0]]) { const e = new THREE.Mesh(new THREE.BoxGeometry(w, .04, d), edgeMat); e.position.set(x, .08, z); mk.add(e); }
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(.9, .9, 9, 12, 1, true), beamMat); beam.position.y = 4.5; mk.add(beam);
+  const arrow = new THREE.Mesh(new THREE.ConeGeometry(.7, 1.4, 10).rotateX(Math.PI), edgeMat); arrow.position.y = 10; mk.add(arrow);
+  city.marker = { g: mk, arrow, fillMat, beamMat, edgeMat };
+  cityBuildMini();
+}
+function cityMarkerUpdate() {
+  const m = city.marker, tg = city.slots[city.target]; if (!m) return;
+  if (!tg) { m.g.visible = false; return; }
+  m.g.visible = true; m.g.position.set(tg.x, 0, tg.z);
+  const prog = clamp(city.parkT / 1.2, 0, 1);                                    // 停止して判定中は、光が黄色→白へ
+  m.arrow.position.y = 10 + Math.sin(city.clock * 4) * .5;
+  m.fillMat.opacity = .24 + .1 * Math.sin(city.clock * 5) + prog * .25; m.beamMat.opacity = .3 + .08 * Math.sin(city.clock * 5);
+  m.fillMat.color.setHex(prog > 0 ? 0xfff0a0 : 0x40ff90);
+}
+function cityDispose() {
+  if (!city.group) return;
+  scene.remove(city.group);
+  city.group.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  city.group = null; city.marker = null; city.aabbs.length = 0; city.sigs.length = 0; city.poles.length = 0; city.slots.length = 0;
+}
+function citySigUpdate() {
+  for (const s of city.sigs) {
+    const st = citySig(s.axis, s.it.off); if (st === s.last) continue; s.last = st;
+    for (const k of ['R', 'Y', 'G']) s.bulbs[k].material = k === st ? s.lit[k] : s.dark[k];
+    s.glow.material.color.setHex(s.glowCol[st]);
+  }
+}
+
+/* ---------- ミニマップ(都市) ---------- */
+function cityBuildMini() {
+  const MI = 200, cv = document.createElement('canvas'); cv.width = cv.height = MI; const g = cv.getContext('2d');
+  const x0 = -75, x1 = 345, z0 = -165, z1 = 255, sc = (MI - 12) / Math.max(x1 - x0, z1 - z0), ox = (MI - (x1 - x0) * sc) / 2 - x0 * sc, oz = (MI - (z1 - z0) * sc) / 2 - z0 * sc;
+  g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(0, 0, MI, MI);
+  g.lineCap = 'butt'; g.strokeStyle = 'rgba(140,140,150,.95)'; g.lineWidth = Math.max(2, CITY_IW * sc);
+  const line = (ax, az, bx, bz) => { g.beginPath(); g.moveTo(ax * sc + ox, az * sc + oz); g.lineTo(bx * sc + ox, bz * sc + oz); g.stroke(); };
+  for (let i = 0; i < 3; i++) line(CITY_XS[0], CITY_ZS[1 + i], CITY_XS[5], CITY_ZS[1 + i]);
+  for (let j = 0; j < 4; j++) line(CITY_XS[1 + j], CITY_ZS[0], CITY_XS[1 + j], CITY_ZS[4]);
+  g.fillStyle = 'rgba(70,90,150,.9)'; g.fillRect(LOT.x0 * sc + ox, LOT.z0 * sc + oz, (LOT.x1 - LOT.x0) * sc, (LOT.z1 - LOT.z0) * sc);          // 駐車場(青)
+  g.fillStyle = '#fff'; g.font = 'bold 11px sans-serif'; g.textAlign = 'center'; g.fillText('P', (LOT.x0 + LOT.x1) / 2 * sc + ox, (LOT.z0 + LOT.z1) / 2 * sc + oz + 4);
+  g.strokeStyle = 'rgba(200,170,60,.95)'; g.lineWidth = Math.max(3, 11 * sc); line(HW.X0, (HW.A + HW.ACC) / 2, HW.X1, (HW.A + HW.ACC) / 2);   // 合流路(黄)
+  g.strokeStyle = '#fff'; g.lineWidth = 2; line(HW.X0, HW.ACC - 1, HW.ACC_END, HW.ACC - 1);
+  city.mini = { cv, sc, ox, oz };
+}
+function cityDrawMini() {
+  const m = city.mini; if (!m) return;
+  mini.style.display = 'block'; mctx.clearRect(0, 0, MINI, MINI); mctx.drawImage(m.cv, 0, 0);
+  const { sc, ox, oz } = m;
+  for (const it of city.inters) {                                     // 信号: 縦の線が南北、横の線が東西の状態
+    const col = k => k === 'G' ? '#4cff88' : k === 'Y' ? '#ffd23a' : '#ff4a3a';
+    mctx.lineWidth = 2; const x = it.x * sc + ox, z = it.z * sc + oz;
+    mctx.strokeStyle = col(citySig('NS', it.off)); mctx.beginPath(); mctx.moveTo(x, z - 4); mctx.lineTo(x, z + 4); mctx.stroke();
+    mctx.strokeStyle = col(citySig('EW', it.off)); mctx.beginPath(); mctx.moveTo(x - 4, z); mctx.lineTo(x + 4, z); mctx.stroke();
+  }
+  const tg = city.slots[city.target];
+  if (tg) { mctx.strokeStyle = '#5fff9a'; mctx.lineWidth = 2; mctx.strokeRect(tg.x * sc + ox - 4, tg.z * sc + oz - 4, 8, 8); }
+  for (const t of traffic) if (t.active && !t.parked) { mctx.fillStyle = '#e8e8e8'; mctx.fillRect(t.x * sc + ox - 1.5, t.z * sc + oz - 1.5, 3, 3); }
+  const px = car.x * sc + ox, py = car.z * sc + oz, hx = Math.sin(car.h), hz = Math.cos(car.h);
+  mctx.beginPath(); mctx.moveTo(px + hx * 7, py + hz * 7); mctx.lineTo(px - hx * 4 - hz * 4.5, py - hz * 4 + hx * 4.5); mctx.lineTo(px - hx * 4 + hz * 4.5, py - hz * 4 - hx * 4.5); mctx.closePath();
+  mctx.fillStyle = '#ffd34d'; mctx.fill(); mctx.strokeStyle = '#000'; mctx.lineWidth = 1.2; mctx.stroke();
+}
+
+/* ---------- AI交通 ---------- */
+function cityPlaceAI(t, hwFlag) {
+  const c = car; let ok = false;
+  for (let tries = 0; tries < 40 && !ok; tries++) {
+    const list = hwFlag ? city.hw : city.edges, e = list[Math.floor(Math.random() * list.length)];
+    const u = e.u0 + 6 + Math.random() * Math.max(1, e.u1 - e.u0 - 12);
+    const px = e.ax + e.dx * u + e.lx * e.off, pz = e.az + e.dz * u + e.lz * e.off;
+    if (Math.hypot(px - c.x, pz - c.z) < 25) continue;
+    if (traffic.some(o => o !== t && o.active && !o.parked && Math.hypot(o.x - px, o.z - pz) < 12)) continue;
+    t.city = { mode: 'edge', edge: e, u, v: 8, cruise: hwFlag ? 15 + Math.random() * 6 : 11 + Math.random() * 3.5, c: null };
+    t.x = px; t.z = pz; t.heading = e.h; t.roadH = e.h; t.vs = 8; ok = true;
+  }
+  if (!ok) { const e = city.edges[0]; t.city = { mode: 'edge', edge: e, u: e.u0 + 2, v: 8, cruise: 12, c: null }; }
+}
+function cityRespawn(t, hwFlag) {              // 出口まで来たら、入口(ゲート)の先頭へ戻す
+  const list = (hwFlag ? city.hw : city.edges).filter(e => !e.fromInner);
+  for (let tries = 0; tries < 12; tries++) {
+    const e = list[Math.floor(Math.random() * list.length)], u = e.u0 + 1, px = e.ax + e.dx * u + e.lx * e.off, pz = e.az + e.dz * u + e.lz * e.off;
+    if (Math.hypot(px - car.x, pz - car.z) < 20) continue;
+    if (traffic.some(o => o !== t && o.active && !o.parked && Math.hypot(o.x - px, o.z - pz) < 14)) continue;
+    t.city.mode = 'edge'; t.city.edge = e; t.city.u = u; t.city.c = null; t.city.v = t.city.cruise * .8; t.city.cruise = hwFlag ? 15 + Math.random() * 6 : 11 + Math.random() * 3.5; return;
+  }
+  t.city.u = t.city.edge.u1 - .1;              // 空きがなければ、その場で待つ
+}
+function cityInitTraffic() {
+  while (traffic.length < 64) traffic.push(makeTraffic());
+  city.clock = 0; city.stats = { park: 0, merge: 0, viol: 0 }; city.parkT = 0; city.parkCool = 0; city.mergeT = 0; city.onAccel = false; city.sl.clear();
+  traffic.forEach(t => { t.active = false; t.rival = false; t.parked = false; t.hit = false; t.dir = 1; t.m.group.visible = false; });
+  for (const sl of city.slots) { sl.taken = false; sl.car = null; }
+  cityPlaceCar(CITY_WARPS[0]);
+  let idx = 0;
+  for (let n = 0; n < 22; n++) { const t = traffic[idx++]; t.active = true; t.m.group.visible = true; t.city = null; cityPlaceAI(t, false); }
+  for (let n = 0; n < 10; n++) { const t = traffic[idx++]; t.active = true; t.m.group.visible = true; t.hwCar = true; cityPlaceAI(t, true); }
+  const order = city.slots.map((_, i) => i).sort(() => Math.random() - .5), nPark = Math.round(city.slots.length * .6);
+  for (let n = 0; n < nPark && idx < traffic.length; n++) {                              // 駐車車両(動かない)
+    const t = traffic[idx++], sl = city.slots[order[n]]; sl.taken = true; sl.car = t;
+    t.active = true; t.parked = true; t.m.group.visible = true; t.city = null; t.hwCar = false;
+    t.x = sl.x + (Math.random() - .5) * .3; t.z = sl.z + (Math.random() - .5) * .3; t.heading = (sl.z < LOT.aisle ? Math.PI : 0) + (Math.random() - .5) * .06; t.roadH = t.heading; t.vs = 0;
+    t.m.group.position.set(t.x, 0, t.z); t.m.group.rotation.set(0, t.heading, 0);
+  }
+  for (const t of traffic) if (t.active) setVisual(t);
+  cityPickTarget();
+}
+function cityPickTarget() {
+  const free = city.slots.map((s, i) => i).filter(i => !city.slots[i].taken); city.target = free.length ? free[Math.floor(Math.random() * free.length)] : -1;
+  const k = city.stats.park; city.rule = PK_ROUNDS[k < 2 ? k : 2 + (k - 2) % 3];       // 1・2回目は向き自由、3回目以降は前向き→バック→バック(ぴったり)をくり返す
+  city.parkT = 0; city.lotT = 0;
+}
+function cityAhead(t, S) {
+  const h = t.heading, hx = Math.sin(h), hz = Math.cos(h), cs = Math.cos(h), sn = Math.sin(h); let gap = 1e9, v = 0;
+  const chk = (ex, ez, eh, ev, anyDir) => {
+    const dx = ex - t.x, dz = ez - t.z, f = dx * hx + dz * hz; if (f < 1 || f > 32) return;
+    if (Math.abs(dx * cs - dz * sn) > 1.9) return; if (!anyDir && Math.cos(h - eh) < .2) return;
+    const g = f - 4.8; if (g < gap) { gap = g; v = ev; }
+  };
+  for (const o of traffic) { if (o === t || !o.active || o.parked) continue; chk(o.x, o.z, o.heading, o.vs, false); }
+  chk(car.x, car.z, car.h, Math.max(0, car.vx * hx + car.vz * hz), true);
+  return { gap, v };
+}
+function cityStepTraffic(dt, active) {
+  city.clock += dt; citySigUpdate(); cityMarkerUpdate();
+  const c = car;
+  for (const t of traffic) {
+    if (!t.active) continue;
+    if (t.parked) { if (active && Math.abs(t.x - c.x) < 7 && Math.abs(t.z - c.z) < 7) { collide(t); t.vs = 0; t.vd = 0; t.spin = 0; t.hit = false; } t.cool = Math.max(0, (t.cool || 0) - dt); continue; }
+    const S = t.city; if (!S) continue;
+    t.cool = Math.max(0, (t.cool || 0) - dt);
+    if (t.hit) { S.v *= Math.exp(-2.5 * dt); t.hitT = (t.hitT || 0) + dt; if (t.hitT > 2.5) { t.hit = false; t.hitT = 0; t.yaw = 0; t.spin = 0; } else { t.yaw = (t.yaw || 0) + (t.spin || 0) * dt; t.spin *= Math.exp(-1.5 * dt); } }
+    else {
+      let target = S.cruise; const e = S.edge;
+      if (S.mode === 'edge') {
+        if (e.toInner) {                                                                     // 信号: 停止線(交差点の4.5m手前)で赤なら止まる
+          const d = (e.u1 - 4.5) - S.u;
+          if (d > -1.5) { const it = city.interMap.get(e.bx + ',' + e.bz), st = citySig(e.axis, it.off); if (st === 'R' || (st === 'Y' && d > S.v * .7 + 2)) target = Math.min(target, Math.sqrt(2 * 3 * Math.max(0, d))); }
+        }
+      } else target = Math.min(target, S.c.kind === 'left' ? 4 : 9);
+      const a = cityAhead(t, S); if (a.gap < 32) target = Math.min(target, Math.max(0, a.v + (a.gap - 6) * .6)); if (a.gap < 5) target = 0;
+      S.v += clamp(target - S.v, -6 * dt, 2.5 * dt);
+    }
+    const ds = S.v * dt;
+    if (S.mode === 'edge') {
+      S.u += ds; const e = S.edge;
+      if (S.u >= e.u1) {
+        if (e.hw || !e.toInner) cityRespawn(t, !!e.hw);
+        else {                                                                              // 交差点へ入る: 直進か左折
+          const left = e.next.left && Math.random() < .3, nx = left ? e.next.left : e.next.straight;
+          const sx = e.ax + e.dx * e.u1 + e.lx * e.off, sz = e.az + e.dz * e.u1 + e.lz * e.off;
+          S.mode = 'cross'; S.c = { sx, sz, h0: e.h, kind: left ? 'left' : 'straight', p: 0, len: left ? Math.PI / 2 * CITY_LANE : CITY_IW, to: nx };
+        }
+      }
+    } else { S.c.p += ds; if (S.c.p >= S.c.len) { S.mode = 'edge'; S.edge = S.c.to; S.u = S.edge.u0; S.c = null; } }
+    cityPose(S, _pose); t.x = _pose.x; t.z = _pose.z; t.heading = _pose.h + (t.yaw || 0); t.roadH = _pose.h; t.vs = S.v;
+    t.m.group.position.set(t.x, 0, t.z); t.m.group.rotation.set(0, t.heading, 0);
+    if (active && Math.abs(t.x - c.x) < 8 && Math.abs(t.z - c.z) < 8) { collide(t); if (t.hit) S.v = clamp(t.vs, 0, 25); }
+  }
+}
+
+/* ---------- 自車の判定(建物・信号柱・信号無視・駐車・合流) ---------- */
+function cityRecover(sp) {                              // 街: いちばん近い車線の上へ(向きも道路に合わせる)
+  let best = null;
+  for (const e of city.edges) {
+    const u = clamp((car.x - e.ax) * e.dx + (car.z - e.az) * e.dz, e.u0, e.u1), x = e.ax + e.dx * u + e.lx * e.off, z = e.az + e.dz * u + e.lz * e.off, d = Math.hypot(car.x - x, car.z - z);
+    if (!best || d < best.d) best = { d, x, z, h: e.h };
+  }
+  if (!best) return;
+  cityPlaceCar({ x: best.x, z: best.z, h: best.h }); car.vx = Math.sin(best.h) * sp; car.vz = Math.cos(best.h) * sp; car.prevVf = sp;
+}
+function cityPlaceCar(w) {
+  const c = car; c.x = w.x; c.z = w.z; c.h = w.h; c.y = 0; c.vx = c.vz = 0; c.yaw = 0; c.steer = 0; c.s = 0; c.d = 0; c.roll = 0; c.pitch = 0; c.pitchV = 0; c.air = false; c.hop = 0; c.tumP = c.tumR = 0;
+  camH = w.h; c.prevVf = 0; c.outside = undefined; c.grass = false; city.sl.clear(); city.parkT = 0; city.mergeT = 0;
+}
+function cityCollideStatic(c, dt) {
+  const R = PLAYER.hit.r, Fx = Math.sin(c.h), Fz = Math.cos(c.h);
+  const hit = (nx, nz, pen, vn) => {
+    c.x += nx * pen; c.z += nz * pen;
+    if (vn > 0) { c.vx += nx * vn * 1.25; c.vz += nz * vn * 1.25; if (vn > 2 && railCool <= 0) { railCool = .35; crashFx(c.x - nx * R, c.y + .6, c.z - nz * R, nx, nz, vn, true); damage(vn * .9); shake = Math.min(1.2, shake + vn / 25); sfxCrash(clamp(vn / 15, 0, 1)); $('flash').style.opacity = clamp(vn / 40, .1, .4); for (let i = 0; i < 6; i++) emit(c.x, c.y + .5, c.z, rnd(-3, 3), rnd(1, 4), rnd(-3, 3), rnd(.3, .6), rnd(.12, .25), 0, 0xffa030, true, 12); } }
+  };
+  for (const off of [PLAYER.hit.off, -PLAYER.hit.off, 0]) {
+    const px = c.x + Fx * off, pz = c.z + Fz * off;
+    for (const b of city.aabbs) {
+      if (px < b.x0 - R || px > b.x1 + R || pz < b.z0 - R || pz > b.z1 + R) continue;
+      const cx = clamp(px, b.x0, b.x1), cz = clamp(pz, b.z0, b.z1), dx = px - cx, dz = pz - cz, d = Math.hypot(dx, dz);
+      let nx, nz, pen;
+      if (d > 1e-4) { if (d >= R) continue; nx = dx / d; nz = dz / d; pen = R - d; }
+      else { const l = px - b.x0, r = b.x1 - px, u = pz - b.z0, dd = b.z1 - pz, m = Math.min(l, r, u, dd); if (m === l) { nx = -1; nz = 0; } else if (m === r) { nx = 1; nz = 0; } else if (m === u) { nx = 0; nz = -1; } else { nx = 0; nz = 1; } pen = R + m; }
+      hit(nx, nz, pen, -(c.vx * nx + c.vz * nz));
+    }
+    for (const p of city.poles) {
+      const dx = px - p.x, dz = pz - p.z, d = Math.hypot(dx, dz); if (d >= R + p.r || d < 1e-4) continue;
+      hit(dx / d, dz / d, R + p.r - d, -(c.vx * dx / d + c.vz * dz / d));
+    }
+  }
+}
+const CITY_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+function cityStepPlayer(c, dt) {
+  cityCollideStatic(c, dt);
+  const v = Math.hypot(c.vx, c.vz);
+  // --- 赤信号を越えたら違反(停止線を越える瞬間に判定。黄色はOK)
+  if (course === 'city') for (let n = 0; n < city.inters.length; n++) {
+    const it = city.inters[n]; if (Math.abs(c.x - it.x) > 30 || Math.abs(c.z - it.z) > 30) continue;
+    for (let a = 0; a < 4; a++) {
+      const [dx, dz] = CITY_DIRS[a], d = (c.x - it.x) * dx + (c.z - it.z) * dz + (CITY_IW / 2 + 4), key = n * 4 + a, prev = city.sl.get(key);
+      city.sl.set(key, d);
+      if (prev === undefined || !(prev < 0 && d >= 0)) continue;
+      const lat = (c.x - it.x) * dz - (c.z - it.z) * dx;
+      if (Math.abs(lat) > 7 || c.vx * dx + c.vz * dz < 1) continue;
+      if (citySig(dx ? 'EW' : 'NS', it.off) === 'R' && state === 'play') { city.stats.viol++; score = Math.max(0, score - 200); popup('信号無視! -200', 'close'); $('flash').style.opacity = .3; }
+    }
+  }
+  if (state !== 'play') return;
+  // --- 駐車: 目標のスロットに、条件(中心からのずれ・枠との角度・向き)を満たして停止し、1.2秒たったら成功
+  city.parkCool = Math.max(0, city.parkCool - dt);
+  const inLot = c.x > LOT.x0 - 6 && c.x < LOT.x1 + 6 && c.z > LOT.z0 - 6 && c.z < LOT.z1 + 6;
+  if (inLot && city.parkCool <= 0) city.lotT += dt;                                                                              // 駐車場に入ってからの経過時間(タイムボーナス用。失敗はなし)
+  const tg = city.slots[city.target], rule = city.rule;
+  if (tg && city.parkCool <= 0) {
+    const dx = c.x - tg.x, dz = c.z - tg.z, th = tg.z < LOT.aisle ? Math.PI : 0;                                                 // th: 前向き(鼻先が奥)の向き
+    const angF = Math.abs(angDiff(c.h, th)), angB = Math.abs(angDiff(c.h, th + Math.PI));
+    const ang = rule.mode === 'front' ? angF : rule.mode === 'back' ? angB : Math.min(angF, angB);
+    if (Math.abs(dx) < rule.dx && Math.abs(dz) < .7 && ang < rule.ang && v < .35) {
+      city.parkT += dt;
+      if (city.parkT > 1.2) {
+        let pts = Math.round(400 - 250 * (Math.abs(dx) / rule.dx) - 150 * (ang / rule.ang));
+        const tb = Math.max(0, Math.round(200 - city.lotT * 5)); pts += tb;                                                         // 駐車場に入ってから素早く停めるほどボーナス(最大200点、40秒でゼロ)
+        score += pts; city.stats.park++; popup('駐車成功! +' + pts + (tb ? '(速さ+' + tb + ')' : ''), 'close'); sfxPass(); city.parkT = 0; city.parkCool = 2.5;
+        cityPickTarget();
+      }
+    } else city.parkT = 0;
+  }
+  // --- 合流: 加速車線から本線へ入り、40km/h以上で3秒走ったら成功
+  if (course !== 'city') return;
+  const inAcc = c.x > HW.X0 && c.x < HW.ACC_END + 4 && Math.abs(c.z - HW.ACC) < 1.9;
+  if (inAcc) city.onAccel = true;
+  const inMain = c.x > HW.X0 && (Math.abs(c.z - HW.A) < 1.9 || Math.abs(c.z - HW.B) < 1.9);
+  if (city.onAccel && inMain && v > 11) { city.mergeT += dt; if (city.mergeT > 3) { score += 300; city.stats.merge++; popup('合流成功! +300', 'close'); sfxPass(); city.onAccel = false; city.mergeT = 0; } }
+  else if (!inMain) city.mergeT = 0;
+  if (city.onAccel && (c.z > HW.B + 5 || c.z < HW.ACC - 8 || c.x > HW.ACC_END + 60)) city.onAccel = false;
+}
+function cityNearestSignal(c) {               // 進行方向の前方(45m以内)で、いちばん近い信号の状態
+  const v = Math.hypot(c.vx, c.vz), fx = Math.sin(c.h), fz = Math.cos(c.h); let best = null;
+  for (const it of city.inters) {
+    const dx = it.x - c.x, dz = it.z - c.z, f = dx * fx + dz * fz; if (f < 4 || f > 60 || Math.abs(dx * fz - dz * fx) > 9) continue;
+    const ax = Math.abs(fx) > Math.abs(fz) ? 'EW' : 'NS'; if (!best || f < best.f) best = { f, st: citySig(ax, it.off) };
+  }
+  return best;
+}
+function cityHudText() {
+  const s = city.stats, ns = cityNearestSignal(car), tip = ns ? `前方の信号: ${ns.st === 'G' ? '青' : ns.st === 'Y' ? '黄' : '赤'}(${Math.round(ns.f - 10)}m)` : '';
+  return `駐車 ${s.park}回　合流 ${s.merge}回　信号違反 ${s.viol}回\n駐車ミッション: 緑の光る枠に「${city.rule.text}」\n${tip}\n[T]でワープ → ${CITY_WARPS[(city.warpI + 1) % CITY_WARPS.length].name}`;
+}
+
+cityBuildGraph();
+
+/* =====================================================================
+   メインループ
+   ===================================================================== */
+{ // URLに ?car=(車のID) のように付けると、準備中の車(ready:false)も選べる(動作確認用)
+  const q0 = new URLSearchParams(location.search).get('car');
+  const q = q0 && VEHICLES[q0] && (!VEHICLES[q0].hybrid || HYBRIDS_ENABLED) ? q0 : null;   // ノア/ステップワゴンはスイッチがfalseの間は呼び出せない
+  if (q) VEHICLES[q].ready = true;
+  setVehicle(q || 'serena', false);
+}
+placeCar(60, 1.8, 0); initTraffic(); resetLaps(); refreshCourseUI(); setDriveMode('normal', false);
+updateChunks(60, 99);
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setDriveMode(b.dataset.mode, false); }));
+document.querySelectorAll('[data-course]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (state === 'ready' || state === 'over') setCourse(b.dataset.course); }));
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(.05, (now - last) / 1000); last = now;
+  if (dt > 0) {
+    drawG(dt); if (course === 'straight') updateDrag(dt);
+    updateRace(dt); stepPlayer(dt); stepTraffic(dt); updateLap(dt); updateRpm(dt); updateChunks(car.s);
+    updateParts(dt); updateDebris(dt); updateFire(dt); updateCamera(dt); updateFx(dt); updateHud(); drawMini();
+    updateAudio(car.thr, Math.hypot(car.vx, car.vz) * 3.6, car.slip, nitroOn, scraping);
+  }
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.G = { crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
+</script>
+</body>
+</html>

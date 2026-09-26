@@ -337,7 +337,20 @@ const CAR_LIM = 7.45;                 // ガードレールに当たる位置(�
 let course = 'public';                // 'public'(無限の公道) / 'tsukuba'(筑波サーキットの周回)
 const PX = [0], PY = [0], PZ = [0], PH = [0];
 // --- 筑波サーキット: 1周ぶんの中心線(2m間隔)。周回するたびに同じ場所へ戻る閉じた線
-const LAP_N = TSUKUBA.length / 2, LAP_LEN = LAP_N * STEP;
+const TSU_SCALE = 1.7;                // コースの拡大率。図面から起こしたコースは各コーナーがきつすぎた(半径23〜38m=時速50〜60kmで曲がる速さ)ので、形はそのままに全体を大きくして、コーナーをゆるく・直線を長くする(1.0で元の大きさ)
+const TSU = (() => {                 // 拡大して、2m間隔に取り直した閉じた中心線
+  const n0 = TSUKUBA.length / 2, X = [], Z = [];
+  for (let i = 0; i < n0; i++) { X.push(TSUKUBA[2 * i] * TSU_SCALE); Z.push(TSUKUBA[2 * i + 1] * TSU_SCALE); }
+  const cum = [0]; for (let i = 1; i <= n0; i++) cum.push(cum[i - 1] + Math.hypot(X[i % n0] - X[i - 1], Z[i % n0] - Z[i - 1]));
+  const L = cum[n0], nn = Math.round(L / STEP), out = []; let k = 0;
+  for (let j = 0; j < nn; j++) {
+    const d = j * L / nn; while (k < n0 - 1 && cum[k + 1] <= d) k++;
+    const t = (d - cum[k]) / (cum[k + 1] - cum[k] || 1), a = k, b = (k + 1) % n0;
+    out.push(X[a] + (X[b] - X[a]) * t, Z[a] + (Z[b] - Z[a]) * t);
+  }
+  return out;
+})();
+const LAP_N = TSU.length / 2, LAP_LEN = LAP_N * STEP;
 const lapX = [], lapZ = [], lapY = [], lapH = [], lapK = [];
 let lapDH = 0;                        // 1周で向きが変わる量(±2π)。角度を巻き戻さず連続させるために使う
 let GROUND_Y = 0;
@@ -346,7 +359,7 @@ function elevTsukuba(s) {             // 起伏(1周でつながる)。実際の
   return 2.6 * Math.sin(f + .6) + 1.1 * Math.sin(3 * f + 2) + .5 * Math.sin(5 * f);
 }
 (function buildLap() {
-  for (let i = 0; i < LAP_N; i++) { lapX.push(TSUKUBA[2 * i]); lapZ.push(TSUKUBA[2 * i + 1]); lapY.push(elevTsukuba(i * STEP)); }
+  for (let i = 0; i < LAP_N; i++) { lapX.push(TSU[2 * i]); lapZ.push(TSU[2 * i + 1]); lapY.push(elevTsukuba(i * STEP)); }
   const hs = [];
   for (let i = 0; i < LAP_N; i++) {   // 前後2点ぶんの差で向きを求め、なめらかにする
     const a = (i - 2 + LAP_N) % LAP_N, b = (i + 2) % LAP_N;

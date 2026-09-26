@@ -2255,14 +2255,24 @@ function wallBox(c) {                                     // サーキットは�
 const angNorm = a => { a %= Math.PI * 2; if (a < 0) a += Math.PI * 2; return a; };
 
 /* ---------- 道のグラフ ---------- */
+const cityIsRoad = (x, z) => {                          // その位置が道路の上か(東西の通り・南北の通り・外周道路)
+  const h = CITY_IW / 2 + .5, inX = x > CITY_XS[0] - h && x < CITY_XS[5] + h, inZ = z > CITY_ZS[0] - h && z < CITY_ZS[4] + h;
+  for (const zs of CITY_ZS) if (inX && Math.abs(z - zs) < h) return true;
+  for (const xs of CITY_XS) if (inZ && Math.abs(x - xs) < h) return true;
+  return false;
+};
 function cityBuildGraph() {
   const E = city.edges; E.length = 0;
   const mk = (ax, az, bx, bz, axis, fromInner, toInner, off = CITY_LANE) => {
     const dx = bx - ax, dz = bz - az, len = Math.hypot(dx, dz), h = Math.atan2(dx, dz);
     E.push({ ax, az, bx, bz, h, len, axis, fromInner, toInner, dx: dx / len, dz: dz / len, lx: Math.cos(h), lz: -Math.sin(h), off, u0: fromInner ? CITY_IW / 2 : 0, u1: toInner ? len - CITY_IW / 2 : len, next: {} });
   };
-  for (let i = 0; i < 3; i++) { const z = CITY_ZS[1 + i]; for (let k = 0; k < 5; k++) { const x0 = CITY_XS[k], x1 = CITY_XS[k + 1], fi = k >= 1, ti = k + 1 <= 4; mk(x0, z, x1, z, 'EW', fi, ti); mk(x1, z, x0, z, 'EW', ti, fi); } }
-  for (let j = 0; j < 4; j++) { const x = CITY_XS[1 + j]; for (let k = 0; k < 4; k++) { const z0 = CITY_ZS[k], z1 = CITY_ZS[k + 1], fi = k >= 1, ti = k + 1 <= 3; mk(x, z0, x, z1, 'NS', fi, ti); mk(x, z1, x, z0, 'NS', ti, fi); } }
+  // 通りの両端は外周道路につながる(T字路)ので、端も交差点の扱い(もうゲートで消えない)
+  for (let i = 0; i < 3; i++) { const z = CITY_ZS[1 + i]; for (let k = 0; k < 5; k++) { const x0 = CITY_XS[k], x1 = CITY_XS[k + 1]; mk(x0, z, x1, z, 'EW', true, true); mk(x1, z, x0, z, 'EW', true, true); } }
+  for (let j = 0; j < 4; j++) { const x = CITY_XS[1 + j]; for (let k = 0; k < 4; k++) { const z0 = CITY_ZS[k], z1 = CITY_ZS[k + 1]; mk(x, z0, x, z1, 'NS', true, true); mk(x, z1, x, z0, 'NS', true, true); } }
+  // 外周道路: 左側通行なので、交通(AI)は反時計まわり(西側は南へ・南側は東へ・東側は北へ・北側は西へ)の車線を走る。反対まわりの車線は自車用(道路としてはある)
+  for (let k = 0; k < 5; k++) { mk(CITY_XS[k + 1], CITY_ZS[0], CITY_XS[k], CITY_ZS[0], 'EW', true, true); mk(CITY_XS[k], CITY_ZS[4], CITY_XS[k + 1], CITY_ZS[4], 'EW', true, true); }
+  for (let k = 0; k < 4; k++) { mk(CITY_XS[0], CITY_ZS[k], CITY_XS[0], CITY_ZS[k + 1], 'NS', true, true); mk(CITY_XS[5], CITY_ZS[k + 1], CITY_XS[5], CITY_ZS[k], 'NS', true, true); }
   for (const e of E) {                                   // 交差点の先: 直進と左折
     for (const f of E) {
       if (f === e || Math.abs(f.ax - e.bx) > .01 || Math.abs(f.az - e.bz) > .01) continue;
@@ -2272,6 +2282,10 @@ function cityBuildGraph() {
   }
   city.inters.length = 0;
   for (let i = 0; i < 3; i++) for (let j = 0; j < 4; j++) city.inters.push({ x: CITY_XS[1 + j], z: CITY_ZS[1 + i], off: (i * 7 + j * 5) % CITY_CYCLE });
+  { let n = 0; const ringPts = [];                                   // 外周道路の交差点: T字路(信号あり)と、4つの角(信号なし)
+    for (let j = 0; j < 6; j++) { ringPts.push([CITY_XS[j], CITY_ZS[0]], [CITY_XS[j], CITY_ZS[4]]); }
+    for (let i = 1; i < 4; i++) ringPts.push([CITY_XS[0], CITY_ZS[i]], [CITY_XS[5], CITY_ZS[i]]);
+    for (const [x, z] of ringPts) { const corner = (x === CITY_XS[0] || x === CITY_XS[5]) && (z === CITY_ZS[0] || z === CITY_ZS[4]); city.inters.push({ x, z, off: (n++ * 5 + 3) % CITY_CYCLE, free: corner }); } }
   // 合流路(一方通行・東向き)の本線の車線(信号なし)
   city.interMap = new Map(city.inters.map(i => [i.x + ',' + i.z, i]));
   city.hw = [HW.A, HW.B].map(z => ({ ax: HW.X0, az: z, bx: HW.X1, bz: z, h: Math.PI / 2, len: HW.X1 - HW.X0, axis: 'HW', fromInner: false, toInner: false, dx: 1, dz: 0, lx: 0, lz: -1, off: 0, u0: 0, u1: HW.X1 - HW.X0, next: {}, hw: true }));
@@ -2324,12 +2338,15 @@ function cityBuild() {
   };
   for (let i = 0; i < 3; i++) street(ext.x0, CITY_ZS[1 + i], ext.x1, CITY_ZS[1 + i]);
   for (let j = 0; j < 4; j++) street(CITY_XS[1 + j], ext.z0, CITY_XS[1 + j], ext.z1);
+  street(ext.x0 - W / 2, ext.z0, ext.x1 + W / 2, ext.z0); street(ext.x0 - W / 2, ext.z1, ext.x1 + W / 2, ext.z1);        // 外周道路(北・南)
+  street(ext.x0, ext.z0 - W / 2, ext.x0, ext.z1 + W / 2); street(ext.x1, ext.z0 - W / 2, ext.x1, ext.z1 + W / 2);        // 外周道路(西・東)
   // --- 交差点の路面・横断歩道・停止線(白の帯は1つのメッシュにまとめる)
   const paint = [];
   const quad = (cx, cz, w, d) => { const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2; paint.push(x0, .04, z0, x0, .04, z1, x1, .04, z1, x0, .04, z0, x1, .04, z1, x1, .04, z0); };
   for (const it of city.inters) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(W, W).rotateX(-Math.PI / 2), matAsph); m.position.set(it.x, .03, it.z); g.add(m);
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (it.free || !cityIsRoad(it.x + dx * (W / 2 + 3), it.z + dz * (W / 2 + 3))) continue;                    // 道のない側(T字路の外側・角)には横断歩道も停止線も引かない
       const cx = it.x + dx * (W / 2 + 1.6), cz = it.z + dz * (W / 2 + 1.6);
       for (let k = -5; k <= 5; k++) { if (dx) quad(cx, it.z + k * 1.2, 3, .6); else quad(it.x + k * 1.2, cz, .6, 3); }   // 横断歩道(しま模様)
       const sx = it.x + dx * (W / 2 + 4) - dz * CITY_LANE, sz = it.z + dz * (W / 2 + 4) + dx * CITY_LANE;             // 停止線(この側から入ってくる車の車線: 進行方向(-dx,-dz)の左側)
@@ -2411,6 +2428,7 @@ function cityBuild() {
   const glowCol = { R: 0xff3020, Y: 0xffc820, G: 0x30ff70 };
   const poleGeo = new THREE.CylinderGeometry(.13, .16, 5.2, 8).translate(0, 2.6, 0), headGeo = new THREE.BoxGeometry(.55, 1.5, .5), bulbGeo = new THREE.BoxGeometry(.32, .32, .1);
   for (const it of city.inters) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {   // dx,dz: この信号を見る車の進行方向
+    if (it.free || !cityIsRoad(it.x - dx * (W / 2 + 3), it.z - dz * (W / 2 + 3))) continue;                     // 信号は、車が入ってくる道のある側にだけ立てる
     const axis = dx ? 'EW' : 'NS', lx = dz, lz = -dx;                                            // 車の左側(進行方向 (dx,dz) の左は (dz,-dx))
     const px = it.x - dx * (W / 2 + 1.2) + lx * (W / 2 + .8), pz = it.z - dz * (W / 2 + 1.2) + lz * (W / 2 + .8);
     const pole = new THREE.Mesh(poleGeo, matRoof); pole.position.set(px, 0, pz); g.add(pole); city.poles.push({ x: px, z: pz, r: .35 });
@@ -2463,6 +2481,7 @@ function cityBuildMini() {
   const line = (ax, az, bx, bz) => { g.beginPath(); g.moveTo(ax * sc + ox, az * sc + oz); g.lineTo(bx * sc + ox, bz * sc + oz); g.stroke(); };
   for (let i = 0; i < 3; i++) line(CITY_XS[0], CITY_ZS[1 + i], CITY_XS[5], CITY_ZS[1 + i]);
   for (let j = 0; j < 4; j++) line(CITY_XS[1 + j], CITY_ZS[0], CITY_XS[1 + j], CITY_ZS[4]);
+  line(CITY_XS[0], CITY_ZS[0], CITY_XS[5], CITY_ZS[0]); line(CITY_XS[0], CITY_ZS[4], CITY_XS[5], CITY_ZS[4]); line(CITY_XS[0], CITY_ZS[0], CITY_XS[0], CITY_ZS[4]); line(CITY_XS[5], CITY_ZS[0], CITY_XS[5], CITY_ZS[4]);   // 外周道路
   g.fillStyle = 'rgba(70,90,150,.9)'; g.fillRect(LOT.x0 * sc + ox, LOT.z0 * sc + oz, (LOT.x1 - LOT.x0) * sc, (LOT.z1 - LOT.z0) * sc);          // 駐車場(青)
   g.fillStyle = '#fff'; g.font = 'bold 11px sans-serif'; g.textAlign = 'center'; g.fillText('P', (LOT.x0 + LOT.x1) / 2 * sc + ox, (LOT.z0 + LOT.z1) / 2 * sc + oz + 4);
   g.strokeStyle = 'rgba(200,170,60,.95)'; g.lineWidth = Math.max(3, 11 * sc); line(HW.X0, (HW.A + HW.ACC) / 2, HW.X1, (HW.A + HW.ACC) / 2);   // 合流路(黄)
@@ -2475,6 +2494,7 @@ function cityDrawMini() {
   mini.style.display = 'block'; mctx.clearRect(0, 0, MINI, MINI); mctx.drawImage(m.cv, 0, 0);
   const { sc, ox, oz } = m;
   for (const it of city.inters) {                                     // 信号: 縦の線が南北、横の線が東西の状態
+    if (it.free) continue;
     const col = k => k === 'G' ? '#4cff88' : k === 'Y' ? '#ffd23a' : '#ff4a3a';
     mctx.lineWidth = 2; const x = it.x * sc + ox, z = it.z * sc + oz;
     mctx.strokeStyle = col(citySig('NS', it.off)); mctx.beginPath(); mctx.moveTo(x, z - 4); mctx.lineTo(x, z + 4); mctx.stroke();
@@ -2561,7 +2581,7 @@ function cityStepTraffic(dt, active) {
       if (S.mode === 'edge') {
         if (e.toInner) {                                                                     // 信号: 停止線(交差点の4.5m手前)で赤なら止まる
           const d = (e.u1 - 4.5) - S.u;
-          if (d > -1.5) { const it = city.interMap.get(e.bx + ',' + e.bz), st = citySig(e.axis, it.off); if (st === 'R' || (st === 'Y' && d > S.v * .7 + 2)) target = Math.min(target, Math.sqrt(2 * 3 * Math.max(0, d))); }
+          if (d > -1.5) { const it = city.interMap.get(e.bx + ',' + e.bz), st = it.free ? 'G' : citySig(e.axis, it.off); if (st === 'R' || (st === 'Y' && d > S.v * .7 + 2)) target = Math.min(target, Math.sqrt(2 * 3 * Math.max(0, d))); }
         }
       } else target = Math.min(target, S.c.kind === 'left' ? 4 : 9);
       const a = cityAhead(t, S); if (a.gap < 32) target = Math.min(target, Math.max(0, a.v + (a.gap - 6) * .6)); if (a.gap < 5) target = 0;
@@ -2573,7 +2593,7 @@ function cityStepTraffic(dt, active) {
       if (S.u >= e.u1) {
         if (e.hw || !e.toInner) cityRespawn(t, !!e.hw);
         else {                                                                              // 交差点へ入る: 直進か左折
-          const left = e.next.left && Math.random() < .3, nx = left ? e.next.left : e.next.straight;
+          const left = e.next.left && (!e.next.straight || Math.random() < .3), nx = left ? e.next.left : e.next.straight;   // 直進できない(T字路・角)ときは左折
           const sx = e.ax + e.dx * e.u1 + e.lx * e.off, sz = e.az + e.dz * e.u1 + e.lz * e.off;
           S.mode = 'cross'; S.c = { sx, sz, h0: e.h, kind: left ? 'left' : 'straight', p: 0, len: left ? Math.PI / 2 * CITY_LANE : CITY_IW, to: nx };
         }
@@ -2641,7 +2661,7 @@ function cityStepPlayer(c, dt) {
       if (prev === undefined || !(prev < 0 && d >= 0)) continue;
       const lat = (c.x - it.x) * dz - (c.z - it.z) * dx;
       if (Math.abs(lat) > 7 || c.vx * dx + c.vz * dz < 1) continue;
-      if (citySig(dx ? 'EW' : 'NS', it.off) === 'R' && state === 'play') { city.stats.viol++; score = Math.max(0, score - 200); popup('信号無視! -200', 'close'); $('flash').style.opacity = .3; }
+      if (!it.free && citySig(dx ? 'EW' : 'NS', it.off) === 'R' && state === 'play') { city.stats.viol++; score = Math.max(0, score - 200); popup('信号無視! -200', 'close'); $('flash').style.opacity = .3; }
     }
   }
   if (state !== 'play') return;
@@ -2677,7 +2697,7 @@ function cityNearestSignal(c) {               // 進行方向の前方(45m以内
   const v = Math.hypot(c.vx, c.vz), fx = Math.sin(c.h), fz = Math.cos(c.h); let best = null;
   for (const it of city.inters) {
     const dx = it.x - c.x, dz = it.z - c.z, f = dx * fx + dz * fz; if (f < 4 || f > 60 || Math.abs(dx * fz - dz * fx) > 9) continue;
-    const ax = Math.abs(fx) > Math.abs(fz) ? 'EW' : 'NS'; if (!best || f < best.f) best = { f, st: citySig(ax, it.off) };
+    if (it.free) continue; const ax = Math.abs(fx) > Math.abs(fz) ? 'EW' : 'NS'; if (!best || f < best.f) best = { f, st: citySig(ax, it.off) };
   }
   return best;
 }

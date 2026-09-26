@@ -1709,7 +1709,7 @@ function stepPlayer(dt) {
 
   // --- 道路との関係
   const loc = isCity() ? { s: 0, d: 0, h: c.h, y: 0, sl: 0 } : locate(c.x, c.z, c.s);
-  if (isCity()) { c.s = 0; c.d = 0; c.roadH = c.h; c.sl = 0; c.y = 0; c.grass = false; scraping = false; railCool = Math.max(0, railCool - dt); cityStepPlayer(c, dt); } else {
+  if (isCity()) { c.s = 0; c.d = 0; c.roadH = c.h; c.sl = 0; c.y = cityOnDeck(c.x, c.z) ? HW_H : 0; c.grass = false; scraping = false; railCool = Math.max(0, railCool - dt); cityStepPlayer(c, dt); } else {
   const sJump = loc.s - c.s;
   c.s = loc.s; c.d = loc.d; c.roadH = loc.h; c.sl = loc.sl;
   if (course === 'tsukuba' && Math.abs(loc.d) < ROAD_HALF + 3 && c.s > c.prog) c.prog = c.s;   // 道の上にいるときだけ進みを認める(コース外でs が飛んでも順位は変わらない。ショートカットは道に戻った時点で加算)
@@ -2036,8 +2036,10 @@ function updateRpm(dt) {                 // 電動系: モーター出力(変速
    ===================================================================== */
 const CITY_XS = [-60, 0, 90, 180, 270, 330], CITY_ZS = [-60, 0, 90, 180, 240];   // 通りの座標(両端はゲート)
 const CITY_IW = 14, CITY_LANE = 3.5, CITY_CYCLE = 24;
+const HW_H = 7;                                        // 高速道路(高架)の路面の高さ(m)
 const HW = { A: -140, B: -143.5, ACC: -147, X0: -60, X1: 330, ACC_END: 80 };      // 合流路: 本線2車線(A,B)+左側の加速車線(ACC)。加速車線は x=80 で行き止まり
 const LOT = { x0: 187, x1: 263, z0: 97, z1: 173, aisle: 135, slotW: 2.6, slotL: 5.2, n: 26 };   // 駐車場(1ブロックぶん)
+const cityOnDeck = (x, z) => x > HW.X0 - 3 && x < HW.X1 + 3 && z < HW.A + 3.2 && z > HW.ACC - 3.2;   // 高架の上か(路面は一定の高さ。地上からは上がれず、ワープ・Rで乗る)
 const CITY_START = { x: -25, z: 86.5, h: Math.PI / 2 };
 const CITY_WARPS = [
   { name: '市街地', x: -25, z: 86.5, h: Math.PI / 2 },
@@ -2076,8 +2078,9 @@ function wallBox(c) {                                     // サーキットは�
   if (!WALL_BOX) WALL_BOX = {
     tsukuba: { x0: Math.min(...lapX) - 110, x1: Math.max(...lapX) + 110, z0: Math.min(...lapZ) - 110, z1: Math.max(...lapZ) + 110 },
     city: { x0: CITY_XS[0] - 30, x1: CITY_XS[5] + 30, z0: CITY_ZS[0] - 30, z1: CITY_ZS[4] + 30 },
+    deck: { x0: HW.X0 - .6, x1: HW.X1 + .6, z0: HW.ACC - 2.4, z1: HW.A + 2.8 },                        // 高速道路(高架)の上の壁: 地上の壁とは別
   };
-  const b = course === 'tsukuba' ? WALL_BOX.tsukuba : WALL_BOX.city; let hit = false;
+  const b = course === 'tsukuba' ? WALL_BOX.tsukuba : cityOnDeck(c.x, c.z) ? WALL_BOX.deck : WALL_BOX.city; let hit = false;
   if (c.x < b.x0) { c.x = b.x0; if (c.vx < 0) c.vx *= -.3; hit = true; } else if (c.x > b.x1) { c.x = b.x1; if (c.vx > 0) c.vx *= -.3; hit = true; }
   if (c.z < b.z0) { c.z = b.z0; if (c.vz < 0) c.vz *= -.3; hit = true; } else if (c.z > b.z1) { c.z = b.z1; if (c.vz > 0) c.vz *= -.3; hit = true; }
   if (hit) wallFeedback(c);
@@ -2193,17 +2196,28 @@ function cityBuild() {
     const cx = LOT.x0 + 5 + LOT.slotW * (i + .5), cz = LOT.aisle + row * (3 + LOT.slotL / 2);
     city.slots.push({ x: cx, z: cz, taken: false });
   }
-  // --- 合流路(本線2車線+加速車線)
+  // --- 合流路(本線2車線+加速車線): 高架。路面は HW_H の高さ、下に橋脚、両側と両端に壁
   const hwGeo = new THREE.PlaneGeometry(HW.X1 - HW.X0, 7).rotateX(-Math.PI / 2);
-  const hw = new THREE.Mesh(hwGeo, matAsph); hw.position.set((HW.X0 + HW.X1) / 2, .02, (HW.A + HW.B) / 2); g.add(hw);
+  const hw = new THREE.Mesh(hwGeo, matAsph); hw.position.set((HW.X0 + HW.X1) / 2, HW_H + .02, (HW.A + HW.B) / 2); g.add(hw);
   const accGeo = new THREE.PlaneGeometry(HW.ACC_END - HW.X0, 3.6).rotateX(-Math.PI / 2);
-  const acc = new THREE.Mesh(accGeo, matAsph); acc.position.set((HW.X0 + HW.ACC_END) / 2, .021, HW.ACC); g.add(acc);
+  const acc = new THREE.Mesh(accGeo, matAsph); acc.position.set((HW.X0 + HW.ACC_END) / 2, HW_H + .021, HW.ACC); g.add(acc);
   const lane = (x0, x1, z, dashed) => { if (dashed) for (let x = x0; x < x1; x += 9) quad(x + 2, z, 4.5, .25); else quad((x0 + x1) / 2, z, x1 - x0, .25); };
   const p0 = paint.length; lane(HW.X0, HW.X1, (HW.A + HW.B) / 2, true); lane(HW.X0, HW.ACC_END, (HW.B + HW.ACC) / 2, true); lane(HW.X0, HW.X1, HW.A + 1.85, false); lane(HW.X0, HW.ACC_END, HW.ACC - 1.85, false); lane(HW.ACC_END, HW.X1, HW.B - 1.85, false);
-  const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.Float32BufferAttribute(paint.slice(p0), 3)); pg2.computeVertexNormals(); g.add(new THREE.Mesh(pg2, matPaint));
-  const barrier = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 4.4), mat(0xcc3030)); barrier.position.set(HW.ACC_END + 1.5, .5, HW.ACC); g.add(barrier);   // 加速車線の行き止まり
-  city.aabbs.push({ x0: HW.ACC_END, x1: HW.ACC_END + 3, z0: HW.ACC - 2.2, z1: HW.ACC + 2.2 });
-  for (let i = 0; i < 3; i++) { const post = new THREE.Mesh(new THREE.BoxGeometry(.3, 1.4, .3), mat(0xf0f0f0)); post.position.set(HW.ACC_END - 8 - i * 6, .7, HW.ACC + 2.1); g.add(post); }
+  const pg2 = new THREE.BufferGeometry(); pg2.setAttribute('position', new THREE.Float32BufferAttribute(paint.slice(p0), 3)); pg2.computeVertexNormals(); const paintHw = new THREE.Mesh(pg2, matPaint); paintHw.position.y = HW_H; g.add(paintHw);
+  const dz0 = HW.ACC - 2.2, dz1 = HW.A + 2.6, dW = dz1 - dz0, dCz = (dz0 + dz1) / 2, dL = HW.X1 - HW.X0 + 1;              // 高架の床(z: 加速車線の外側〜本線の外側)
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(dL, .9, dW), matSide); slab.position.set((HW.X0 + HW.X1) / 2, HW_H - .45, dCz); g.add(slab);
+  const rail = (zc) => { const m = new THREE.Mesh(new THREE.BoxGeometry(dL, 1.15, .4), matSide); m.position.set((HW.X0 + HW.X1) / 2, HW_H + .58, zc); g.add(m); };
+  rail(dz0 - .2); rail(dz1 + .2);                                                                                                // 両側の壁(車は出られない)
+  for (const [xc, w] of [[HW.X0 - .5, .4], [HW.X1 + .5, .4]]) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, 1.15, dW + .8), matSide); m.position.set(xc, HW_H + .58, dCz); g.add(m); }   // 両端の壁
+  const nPier = Math.floor((HW.X1 - HW.X0) / 30) + 1, piers = new THREE.InstancedMesh(new THREE.CylinderGeometry(.55, .7, HW_H - .9, 10).translate(0, (HW_H - .9) / 2, 0), matSide, nPier * 2), Mp = new THREE.Matrix4();
+  for (let i = 0; i < nPier; i++) for (let k = 0; k < 2; k++) piers.setMatrixAt(i * 2 + k, Mp.makeTranslation(HW.X0 + 8 + i * 30, 0, dCz + (k ? 3.2 : -3.2)));   // 橋脚(30mおき・2本ずつ)
+  g.add(piers);
+  const dz0w = dz0 - .4, dz1w = dz1 + .4;
+  city.aabbs.push({ x0: HW.X0 - 1, x1: HW.X1 + 1, z0: dz0w - .2, z1: dz0w + .4, deck: true }, { x0: HW.X0 - 1, x1: HW.X1 + 1, z0: dz1w - .4, z1: dz1w + .2, deck: true },
+    { x0: HW.X0 - 1, x1: HW.X0 - .3, z0: dz0w, z1: dz1w, deck: true }, { x0: HW.X1 + .3, x1: HW.X1 + 1, z0: dz0w, z1: dz1w, deck: true });     // 壁の当たり判定(高架の上にいるときだけ)
+  const barrier = new THREE.Mesh(new THREE.BoxGeometry(3, 1, 4.4), mat(0xcc3030)); barrier.position.set(HW.ACC_END + 1.5, HW_H + .5, HW.ACC); g.add(barrier);   // 加速車線の行き止まり
+  city.aabbs.push({ x0: HW.ACC_END, x1: HW.ACC_END + 3, z0: HW.ACC - 2.2, z1: HW.ACC + 2.2, deck: true });
+  for (let i = 0; i < 3; i++) { const post = new THREE.Mesh(new THREE.BoxGeometry(.3, 1.4, .3), mat(0xf0f0f0)); post.position.set(HW.ACC_END - 8 - i * 6, HW_H + .7, HW.ACC + 2.1); g.add(post); }
   // --- 信号(各交差点に4本): 支柱+3灯の箱。点灯は色つきの光でも示す
   const dark = { R: new THREE.MeshBasicMaterial({ color: 0x3a0f0f }), Y: new THREE.MeshBasicMaterial({ color: 0x3a330f }), G: new THREE.MeshBasicMaterial({ color: 0x0f3a1c }) };
   const lit = { R: new THREE.MeshBasicMaterial({ color: 0xff2a20 }), Y: new THREE.MeshBasicMaterial({ color: 0xffcc22 }), G: new THREE.MeshBasicMaterial({ color: 0x35ff78 }) };
@@ -2324,7 +2338,7 @@ function cityInitTraffic() {
     const t = traffic[idx++], sl = city.slots[order[n]]; sl.taken = true; sl.car = t;
     t.active = true; t.parked = true; t.m.group.visible = true; t.city = null; t.hwCar = false;
     t.x = sl.x + (Math.random() - .5) * .3; t.z = sl.z + (Math.random() - .5) * .3; t.heading = (sl.z < LOT.aisle ? Math.PI : 0) + (Math.random() - .5) * .06; t.roadH = t.heading; t.vs = 0;
-    t.m.group.position.set(t.x, 0, t.z); t.m.group.rotation.set(0, t.heading, 0);
+    t.m.group.position.set(t.x, cityOnDeck(t.x, t.z) ? HW_H : 0, t.z); t.m.group.rotation.set(0, t.heading, 0);
   }
   for (const t of traffic) if (t.active) setVisual(t);
   cityPickTarget();
@@ -2378,13 +2392,18 @@ function cityStepTraffic(dt, active) {
       }
     } else { S.c.p += ds; if (S.c.p >= S.c.len) { S.mode = 'edge'; S.edge = S.c.to; S.u = S.edge.u0; S.c = null; } }
     cityPose(S, _pose); t.x = _pose.x; t.z = _pose.z; t.heading = _pose.h + (t.yaw || 0); t.roadH = _pose.h; t.vs = S.v;
-    t.m.group.position.set(t.x, 0, t.z); t.m.group.rotation.set(0, t.heading, 0);
+    t.m.group.position.set(t.x, cityOnDeck(t.x, t.z) ? HW_H : 0, t.z); t.m.group.rotation.set(0, t.heading, 0);
     if (active && Math.abs(t.x - c.x) < 8 && Math.abs(t.z - c.z) < 8) { collide(t); if (t.hit) S.v = clamp(t.vs, 0, 25); }
   }
 }
 
 /* ---------- 自車の判定(建物・信号柱・信号無視・駐車・合流) ---------- */
-function cityRecover(sp) {                              // 街: いちばん近い車線の上へ(向きも道路に合わせる)
+function cityRecover(sp) {                              // 街: いちばん近い車線の上へ(向きも道路に合わせる)。高架の上なら高架の車線へ
+  if (cityOnDeck(car.x, car.z)) {
+    let bz = HW.ACC; for (const z of [HW.ACC, HW.B, HW.A]) if (Math.abs(z - car.z) < Math.abs(bz - car.z)) bz = z;
+    const xr = clamp(car.x, HW.X0 + 8, bz === HW.ACC ? HW.ACC_END - 8 : HW.X1 - 8);
+    cityPlaceCar({ x: xr, z: bz, h: Math.PI / 2 }); car.vx = Math.sin(Math.PI / 2) * sp; car.vz = 0; car.prevVf = sp; return;
+  }
   let best = null;
   for (const e of city.edges) {
     const u = clamp((car.x - e.ax) * e.dx + (car.z - e.az) * e.dz, e.u0, e.u1), x = e.ax + e.dx * u + e.lx * e.off, z = e.az + e.dz * u + e.lz * e.off, d = Math.hypot(car.x - x, car.z - z);
@@ -2406,6 +2425,7 @@ function cityCollideStatic(c, dt) {
   for (const off of [PLAYER.hit.off, -PLAYER.hit.off, 0]) {
     const px = c.x + Fx * off, pz = c.z + Fz * off;
     for (const b of city.aabbs) {
+      if (b.deck === true && c.y < 3) continue;                                           // 高架の壁・行き止まりは、高架の上にいるときだけ
       if (px < b.x0 - R || px > b.x1 + R || pz < b.z0 - R || pz > b.z1 + R) continue;
       const cx = clamp(px, b.x0, b.x1), cz = clamp(pz, b.z0, b.z1), dx = px - cx, dz = pz - cz, d = Math.hypot(dx, dz);
       let nx, nz, pen;

@@ -1407,6 +1407,7 @@ function refreshCourseUI() {
 }
 function setCourse(name) {                              // コース切り替え: 道路・木・交通・自車位置を作り直して待機画面へ
   damagedChunks.clear(); resetDestruction(); resetWear();
+  serenaTrafficN = 0; for (const t of traffic) t._useS = false;   // セレナ台数の上限カウントを、コース切り替えのたびに数え直す(ずれを防ぐ)
   course = name; resetRoad(); setLanes();
   for (const [, ch] of chunks) { scene.remove(ch.grp); ch.geos.forEach(g => g.dispose()); ch.inst.forEach(m => m.dispose()); }
   chunks.clear();
@@ -1446,8 +1447,12 @@ function makeTraffic() {
   m.glowPos = [...m.tailG, ...m.headG].map(g => g.position.clone());
   return { m, color: o.color, active: true, rival: false, finT: null, name: '', base: { w: o.w, l: o.l, truck: !!o.truck }, w: o.w, l: o.l, s: 0, d: 0, dir: 1, vs: 0, cruise: 20, vd: 0, spin: 0, yaw: 0, hit: false, cool: 0, prevRel: 0, x: 0, z: 0, heading: 0, roadH: 0, sl: 0 };
 }
+let serenaTrafficN = 0;                  // 対向車で今セレナのモデル(22万ポリゴンあって重い)になっている台数。増やしすぎないよう上限を決める
+const SERENA_TRAFFIC_CAP = 3;            // 同時にこの台数まで(それ以上は箱の車のまま)
 function setVisual(t) {                  // 対向車ならSerena、それ以外は箱の車
-  const useS = !!SERENA && t.dir < 0 && !t.base.truck && Math.random() < .65;
+  const want = !!SERENA && t.dir < 0 && !t.base.truck && Math.random() < .35;
+  const useS = want && (t._useS || serenaTrafficN < SERENA_TRAFFIC_CAP);   // 上限に達していたら、新しくは差し替えない(すでに差し替わっている車はそのまま)
+  if (t._useS !== useS) { serenaTrafficN += useS ? 1 : -1; t._useS = useS; }
   if (useS && !t.serena) { t.serena = SERENA.clone(true); t.m.group.add(t.serena); }
   if (t.serena) t.serena.visible = useS;
   t.m.parts.forEach(o => o.visible = !useS);
@@ -3047,7 +3052,7 @@ document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click'
 document.querySelectorAll('[data-course]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (state === 'ready' || state === 'over') setCourse(b.dataset.course); }));
 let last = performance.now();
 // ---- 重いフレームを見つけるための一時的な計測(原因が分かったら、ここからdiagEl関連もまとめて消す) ----
-let diagT0 = 0, diagWorst = 0, diagGcSusp = 0, diagHeapMax = 0, diagWorstGap = 0, diagGapOver = 0, diagN = 0;   // 効果があったか比べるための一時的な計測(確認できたら削除)
+let diagT0 = 0, diagWorst = 0, diagGcSusp = 0, diagHeapMax = 0, diagWorstGap = 0, diagGapOver = 0, diagN = 0;   // コマ落ちの見張り番(あえて残してある)。3秒おきにコンソールへ[perf2]の行を出すだけで、負荷はごく軽い。消したくなったらここから下のdiag関連ごと削除
 function frame(now) {
   const rawGap = last ? now - last : 0;
   if (rawGap > diagWorstGap) diagWorstGap = rawGap;

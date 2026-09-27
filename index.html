@@ -2879,6 +2879,7 @@ function cityPickTarget() {
   const k = city.stats.park; city.rule = PK_ROUNDS[k < 2 ? k : 2 + (k - 2) % 3];       // 1・2回目は向き自由、3回目以降は前向き→バック→バック(ぴったり)をくり返す
   city.parkT = 0; city.lotT = 0;
 }
+const _aheadTmp = { gap: 0, v: 0 };     // cityAheadで使い回すオブジェクト(毎フレーム・通りを走る車の台数ぶん呼ばれるので、作りすぎを避ける)
 function cityAhead(t, S) {
   const h = t.heading, hx = Math.sin(h), hz = Math.cos(h), cs = Math.cos(h), sn = Math.sin(h); let gap = 1e9, v = 0;
   const chk = (ex, ez, eh, ev, anyDir) => {
@@ -2888,7 +2889,7 @@ function cityAhead(t, S) {
   };
   for (const o of traffic) { if (o === t || !o.active || o.parked) continue; chk(o.x, o.z, o.heading, o.vs, false); }
   chk(car.x, car.z, car.h, Math.max(0, car.vx * hx + car.vz * hz), true);
-  return { gap, v };
+  _aheadTmp.gap = gap; _aheadTmp.v = v; return _aheadTmp;
 }
 const _carDeckTmp = {};                                            // cityStepTrafficで、自車の高架上の位置を1フレームに1回だけ求めて使い回す(高架の車の台数ぶん、同じ計算を繰り返さない)
 function cityStepTraffic(dt, active) {
@@ -3046,7 +3047,13 @@ document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click'
 document.querySelectorAll('[data-course]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (state === 'ready' || state === 'over') setCourse(b.dataset.course); }));
 let last = performance.now();
 // ---- 重いフレームを見つけるための一時的な計測(原因が分かったら、ここからdiagEl関連もまとめて消す) ----
+let diagT0 = 0, diagWorst = 0, diagGcSusp = 0, diagHeapMax = 0, diagWorstGap = 0, diagGapOver = 0, diagN = 0;   // 効果があったか比べるための一時的な計測(確認できたら削除)
 function frame(now) {
+  const rawGap = last ? now - last : 0;
+  if (rawGap > diagWorstGap) diagWorstGap = rawGap;
+  if (rawGap > 33) diagGapOver++;
+  const heapBefore = performance.memory ? performance.memory.usedJSHeapSize : 0;
+  const fStart = performance.now();
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (dt > 0) {
     drawG(dt); if (course === 'straight') updateDrag(dt);
@@ -3055,6 +3062,14 @@ function frame(now) {
     updateAudio(car.thr, Math.hypot(car.vx, car.vz) * 3.6, car.slip, nitroOn, scraping);
   }
   renderer.render(scene, camera);
+  const total = performance.now() - fStart;
+  const heapAfter = performance.memory ? performance.memory.usedJSHeapSize : 0;
+  diagN++; diagHeapMax = Math.max(diagHeapMax, heapBefore); if (diagHeapMax - heapAfter > 3 * 1048576) diagGcSusp++;
+  if (total > diagWorst) diagWorst = total;
+  if (now - diagT0 > 3000) {
+    console.log(`[perf2] ${diagN}フレーム中、コマの間隔33ms超え${diagGapOver}回(最悪${diagWorstGap.toFixed(0)}ms)。GC疑い${diagGcSusp}回。自分のコード最悪${diagWorst.toFixed(1)}ms`);
+    diagT0 = now; diagN = diagGcSusp = diagWorstGap = diagGapOver = 0; diagWorst = 0; diagHeapMax = 0;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

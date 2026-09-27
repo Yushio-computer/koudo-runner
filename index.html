@@ -3035,7 +3035,9 @@ updateChunks(60, 99);
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setDriveMode(b.dataset.mode, false); }));
 document.querySelectorAll('[data-course]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (state === 'ready' || state === 'over') setCourse(b.dataset.course); }));
 let last = performance.now();
+let diagT0 = 0, diagWorst = 0, diagWorstLogic = 0, diagWorstRender = 0, diagOver = 0, diagN = 0;   // 重いフレームを見つけるための一時的な計測(コンソールに数秒おきに出す。原因が分かったら消す)
 function frame(now) {
+  const fStart = performance.now();
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (dt > 0) {
     drawG(dt); if (course === 'straight') updateDrag(dt);
@@ -3043,7 +3045,16 @@ function frame(now) {
     updateParts(dt); updateDebris(dt); updateFire(dt); updateCamera(dt); updateFx(dt); updateHud(dt); drawMini(dt);
     updateAudio(car.thr, Math.hypot(car.vx, car.vz) * 3.6, car.slip, nitroOn, scraping);
   }
+  const logicEnd = performance.now();
   renderer.render(scene, camera);
+  const renderEnd = performance.now();
+  const total = renderEnd - fStart, logic = logicEnd - fStart, rend = renderEnd - logicEnd;
+  diagN++; diagWorst = Math.max(diagWorst, total); diagWorstLogic = Math.max(diagWorstLogic, logic); diagWorstRender = Math.max(diagWorstRender, rend);
+  if (total > 33) diagOver++;
+  if (now - diagT0 > 3000) {
+    console.log(`[perf] ${diagN}フレーム中、33ms超え(30fps未満)${diagOver}回。最悪: 全体${diagWorst.toFixed(1)}ms (ゲーム進行${diagWorstLogic.toFixed(1)}ms / 描画${diagWorstRender.toFixed(1)}ms)`);
+    diagT0 = now; diagWorst = diagWorstLogic = diagWorstRender = diagOver = diagN = 0;
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

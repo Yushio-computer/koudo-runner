@@ -111,7 +111,7 @@
       <div style="opacity:.85">スタート画面:　<kbd>A</kbd><kbd>D</kbd>コース選択　<kbd>W</kbd><kbd>S</kbd>車種選択　<kbd>Enter</kbd>/<kbd>Space</kbd>スタート</div>
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
       <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
-      <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF</div>
+      <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)</div>
     </div>
     <div class="go">Enter かクリックでスタート</div>
   </div>
@@ -281,8 +281,9 @@ scene.add(ground);
    ・URLに ?time=21:30 と付けると、その時刻から進む(動作確認用)
    ===================================================================== */
 const TOD = { offset: 0, last: -1e9, envAt: 0 };
+let todEnabled = true;                                    // OFFのときは、現実の時間を見ずに常に昼(正午)にする(N キーで切り替え)
 { const q = new URLSearchParams(location.search).get('time'); if (q && /^\d{1,2}:\d{2}$/.test(q)) { const [h, m] = q.split(':').map(Number), d = new Date(); TOD.offset = (h + m / 60) - (d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600); } }
-const todHours = () => { const d = new Date(), h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600 + TOD.offset; return ((h % 24) + 24) % 24; };
+const todHours = () => { if (!todEnabled) return 12; const d = new Date(), h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600 + TOD.offset; return ((h % 24) + 24) % 24; };
 // 太陽の高さ(度)ごとの空の設定: [高さ, 地平線, 中間, 天頂, 太陽光の色, 太陽光の強さ, 半球光の空色, 半球光の地面色, 半球光の強さ, 山の色みづけ]
 const SKY_KEYS = [
   [-18, 0x0d1424, 0x080d1c, 0x03050c, 0x6a7fb8, .0, 0x1c2748, 0x0b0d14, .55, 0x1c2440],
@@ -878,6 +879,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyE' && hasEPedal()) { ePedal = !ePedal; popup(ePedal ? 'e-Pedal ON' : 'e-Pedal OFF'); }
   if (e.code === 'KeyB' && VEH.powertrain.coastB) { decelSel = decelSel === 'D' ? 'B' : 'D'; popup('シフト ' + decelSel + (decelSel === 'B' ? '(回生を強める)' : '(穏やかな減速)')); }
   if (e.code === 'KeyM') { muted = !muted; if (master) master.gain.value = muted ? 0 : .5; }
+  if (e.code === 'KeyN') { todEnabled = !todEnabled; updateSky(true); if (typeof refreshEnv === 'function' && envReady) refreshEnv(); popup(todEnabled ? '現実の時間と連動: ON' : '現実の時間と連動: OFF(常に昼)'); }
   if (e.code === 'Enter' || (e.code === 'Space' && state === 'ready')) { if (state === 'ready') startGame(); else if (state === 'over') restart(); }
   if (e.code === 'KeyR') { if (state === 'over') restart(); else if (state === 'play') recover(); }
 });
@@ -2372,13 +2374,13 @@ function mkPath(pts, closed) {                            // 点列 → 道の�
   for (let i = 0; i < n; i++) { const a = pts[closed ? (i - 1 + n) % n : Math.max(0, i - 1)], b = pts[closed ? (i + 1) % n : Math.min(n - 1, i + 1)]; let tx = b[0] - a[0], tz = b[1] - a[1]; const l = Math.hypot(tx, tz) || 1; T.push([tx / l, tz / l]); }
   return { pts, S, len, T, closed, n };
 }
-function pathProject(P, x, z) {                           // 位置 → 道の最寄り点: 道のり s・距離 dist・左方向の横ずれ lat(左が正=高架では街の内側)
+function pathProject(P, x, z, out) {                      // 位置 → 道の最寄り点: 道のり s・距離 dist・左方向の横ずれ lat(左が正=高架では街の内側)。outを渡すと使い回す(結果をまたいで比較する場所では渡さないこと)
   let bi = 0, bd = 1e18; const p = P.pts;
   for (let i = 0; i < P.n; i++) { const dx = x - p[i][0], dz = z - p[i][1], d2 = dx * dx + dz * dz; if (d2 < bd) { bd = d2; bi = i; } }
   const t = P.T[bi], ax = x - p[bi][0], az = z - p[bi][1], along = ax * t[0] + az * t[1];
   const prev = bi > 0 ? P.S[bi] - P.S[bi - 1] : 2, next = bi < P.n - 1 ? P.S[bi + 1] - P.S[bi] : 2;                          // 頂点の間は補間する(高さが階段状にならないように)
   let su = P.S[bi] + clamp(along, -prev, next); if (!P.closed) su = clamp(su, 0, P.len);
-  return { i: bi, s: su, dist: Math.sqrt(bd), lat: ax * t[1] - az * t[0] };
+  const o = out || {}; o.i = bi; o.s = su; o.dist = Math.sqrt(bd); o.lat = ax * t[1] - az * t[0]; return o;
 }
 function pathAt(P, u, lane = 0, out) {                    // 道のり u の位置・向き(左に lane だけずらす)。outを渡すと使い回す
   if (P.closed) u = ((u % P.len) + P.len) % P.len; let lo = 0, hi = P.n - 1;
@@ -2433,17 +2435,19 @@ function cityLevel(c) {                                            // 自車が�
   if (Math.abs(d.lat) < DECK_W / 2 + .6 && dyd < 1.6 && (!best || dyd <= best.dy)) return { y: HW_H, zone: 'deck', d };
   return best || { y: 0, zone: 'ground' };
 }
+const _dwTmp = {};                                                 // cityDeckWallsで使い回すオブジェクト(毎フレーム呼ばれるので、作りすぎを避ける)
 function cityDeckWalls(c) {                                        // 高架の両側の壁(内側はランプのつながる所だけ切れている)
-  const d = pathProject(DECK, c.x, c.z); if (Math.abs((c.y || 0) - HW_H) > 1.6 || Math.abs(d.lat) < DECK_W / 2 - .95) return;
+  const d = pathProject(DECK, c.x, c.z, _dwTmp); if (Math.abs((c.y || 0) - HW_H) > 1.6 || Math.abs(d.lat) < DECK_W / 2 - .95) return;
   if (Math.abs(d.lat) > DECK_W / 2 + 2.5) return; if (d.lat > 0 && inDeckGap(d.s)) return;
   const sg = Math.sign(d.lat), half = DECK_W / 2 - .95, t = DECK.T[d.i], nx = t[1], nz = -t[0], ex = d.lat - sg * half;
   c.x -= nx * ex; c.z -= nz * ex; const vo = (c.vx * nx + c.vz * nz) * sg;
   if (vo > 0) { c.vx -= nx * sg * vo * 1.25; c.vz -= nz * sg * vo * 1.25; if (vo > 3 && railCool <= 0) { railCool = .35; shake = Math.min(1.2, shake + vo / 25); sfxCrash(clamp(vo / 15, 0, 1)); } }
 }
+const _rwTmp = {};                                                 // cityRampWallsで使い回すオブジェクト(毎フレーム呼ばれるので、作りすぎを避ける)
 function cityRampWalls(c) {                                        // ランプの両側の壁(高架や地上につながる端は壁なし)。高さのちがう地上の車には効かない
   if (cityLevel(c).zone !== 'ramp') return;                          // ランプの上にいる車だけ(高架を走る車が、合流するランプの壁に引き寄せられないように)
   for (const rp of RAMPS) {
-    const r = pathProject(rp, c.x, c.z), y = rp.y(r.s); if (y < .9 || Math.abs((c.y || 0) - y) > .3) continue;      // 壁がある高さ(地上から1m近く浮いた所)で、その路面に乗っている車だけ。下の地上の車は引っぱらない
+    const r = pathProject(rp, c.x, c.z, _rwTmp), y = rp.y(r.s); if (y < .9 || Math.abs((c.y || 0) - y) > .3) continue;      // 壁がある高さ(地上から1m近く浮いた所)で、その路面に乗っている車だけ。下の地上の車は引っぱらない
     const s0 = rp.kind === 'off' ? 45 : 20, s1 = rp.kind === 'off' ? rp.len - 25 : rp.len - 45; if (r.s < s0 || r.s > s1) continue;
     const half = RAMP_W / 2 - .95; if (r.dist <= half || r.dist > RAMP_W / 2 + 8) continue;
     const P = rp.pts[r.i], nx = (c.x - P[0]) / (r.dist || 1), nz = (c.z - P[1]) / (r.dist || 1), ex = r.dist - half;
@@ -2773,14 +2777,14 @@ function cityPlaceDeckAI(t, n) {                                   // 高架の�
 }
 const _deckTmp = {};                    // cityDeckPoseで使い回すオブジェクト(毎フレーム・高架の車の台数ぶん呼ばれるので、作りすぎを避ける)
 function cityDeckPose(t) { const S = t.city, q = pathAt(DECK, S.u, S.lane, _deckTmp); t.x = q.x; t.z = q.z; t.heading = q.h + (t.yaw || 0); t.roadH = q.h; t.vs = S.v; t.m.group.position.set(t.x, HW_H, t.z); t.m.group.rotation.set(0, t.heading, 0); }
-function cityDeckStep(t, S, dt, active) {
+function cityDeckStep(t, S, dt, active, carDeck) {                 // carDeck: 自車の高架上の位置(呼び出し側で1フレームに1回だけ計算したものを、車の台数ぶん使い回す)
   const L = DECK.len;
   if (t.hit) { S.v *= Math.exp(-2.5 * dt); t.hitT = (t.hitT || 0) + dt; if (t.hitT > 2.5) { t.hit = false; t.hitT = 0; t.yaw = 0; t.spin = 0; } else { t.yaw = (t.yaw || 0) + (t.spin || 0) * dt; t.spin *= Math.exp(-1.5 * dt); } }
   else {
     let target = Math.min(S.cruise, cityEventCap(S)), gap = 1e9, v2 = 0;
     for (const o of traffic) { if (o === t || !o.active || !o.city || o.city.mode !== 'deck' || o.city.lane !== S.lane) continue; const d = (((o.city.u - S.u) % L) + L) % L; if (d < gap) { gap = d; v2 = o.city.v; } }
     gap -= 4.8;
-    if ((car.y || 0) > 3) { const pp = pathProject(DECK, car.x, car.z); if (Math.abs(pp.lat - S.lane) < 2.2) { const d = (((pp.s - S.u) % L) + L) % L - 4.8; if (d < gap) { gap = d; v2 = Math.max(0, car.vx * Math.sin(t.roadH) + car.vz * Math.cos(t.roadH)); } } }
+    if (carDeck) { const pp = carDeck; if (Math.abs(pp.lat - S.lane) < 2.2) { const d = (((pp.s - S.u) % L) + L) % L - 4.8; if (d < gap) { gap = d; v2 = Math.max(0, car.vx * Math.sin(t.roadH) + car.vz * Math.cos(t.roadH)); } } }
     if (gap < 40) target = Math.min(target, Math.max(0, v2 + (gap - 6) * .6)); if (gap < 5) target = 0;
     S.v += clamp(target - S.v, -6 * dt, 2.5 * dt);
   }
@@ -2886,15 +2890,17 @@ function cityAhead(t, S) {
   chk(car.x, car.z, car.h, Math.max(0, car.vx * hx + car.vz * hz), true);
   return { gap, v };
 }
+const _carDeckTmp = {};                                            // cityStepTrafficで、自車の高架上の位置を1フレームに1回だけ求めて使い回す(高架の車の台数ぶん、同じ計算を繰り返さない)
 function cityStepTraffic(dt, active) {
   city.clock += dt; citySigUpdate(); cityMarkerUpdate(); if (active) cityEventsStep(dt);
   const c = car;
+  const carDeck = (car.y || 0) > 3 ? pathProject(DECK, car.x, car.z, _carDeckTmp) : null;
   for (const t of traffic) {
     if (!t.active) continue;
     if (t.parked) { if (active && Math.abs(t.x - c.x) < 7 && Math.abs(t.z - c.z) < 7) { collide(t); t.vs = 0; t.vd = 0; t.spin = 0; t.hit = false; } t.cool = Math.max(0, (t.cool || 0) - dt); continue; }
     const S = t.city; if (!S) continue;
     t.cool = Math.max(0, (t.cool || 0) - dt);
-    if (S.mode === 'deck') { cityDeckStep(t, S, dt, active); continue; }
+    if (S.mode === 'deck') { cityDeckStep(t, S, dt, active, carDeck); continue; }
     if (t.hit) { S.v *= Math.exp(-2.5 * dt); t.hitT = (t.hitT || 0) + dt; if (t.hitT > 2.5) { t.hit = false; t.hitT = 0; t.yaw = 0; t.spin = 0; } else { t.yaw = (t.yaw || 0) + (t.spin || 0) * dt; t.spin *= Math.exp(-1.5 * dt); } }
     else {
       let target = Math.min(S.cruise, cityEventCap(S)); const e = S.edge;

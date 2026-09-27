@@ -1736,7 +1736,7 @@ function damage(v) { if (DAMAGE_ENABLED) car.health = Math.max(0, car.health - v
    ・ブレーキ(S/↓)・サイドブレーキ・もう一度P・道路を出るで解除。アクセルを踏むと加速(離すと設定速度へ戻る)。ハンドルを切ると車線維持を一時停止(車線変更もできる)
    ===================================================================== */
 const PP = { state: 'off', t: 0, set: 0, laneT: 0, thr: 0, brk: 0, steer: 0, u: 0, vPrev: 0, aMeas: 0, lead: null, laneSeen: 0, leadSeen: false, steerOvr: 0, accOvr: false, lostT: 0, msg: '', msgT: 0, hud: '', ldA: 1.3, ldB: 8, ki: 0, kE: 0, kH: 0, kL: 0, kC: 100, cmdLP: undefined, leadId: null, leadV: 0, aLead: 0, hardBrakeT: 0 };
-const PP_LEN = 4.7, PP_GAP_MIN = 8, PP_ALAT = 4.0, PP_ALAT_SAFE = 2.0, PP_DEC = 2.6, PP_PANIC_DEC = .5;                     // 自車の長さ・保つ車間距離の下限(m)・カーブで許す横加速度(m/s²)・カーブ減速(m/s²)                     // 自車の長さ・車間時間(秒)・カーブで許す横加速度(m/s²)
+const PP_LEN = 4.7, PP_GAP_MIN = 8, PP_ALAT = 4.0, PP_DEC = 2.6;                     // 自車の長さ・保つ車間距離の下限(m)・カーブで許す横加速度(m/s²)・カーブ減速(m/s²)                     // 自車の長さ・車間時間(秒)・カーブで許す横加速度(m/s²)
 const ppAvail = () => vehicleId === 'serena' && (course === 'public' || course === 'city');
 function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色のシステム音(サイン波の柔らかいチャイム)
   if (!ac) return; const t0 = ac.currentTime;
@@ -1836,19 +1836,16 @@ function ppStep(dt) {                                                   // 毎�
     PP.steer += (cmdL - PP.steer) * Math.min(1, dt / .12);
   }
   // --- 縦: 設定速度・カーブ・前の車から、目標の加減速度(a_des)を決める
-  let vc = 1e9, needC = 0, panicC = false; const reach = Math.min(420, 30 + v * v / (2 * PP_DEC));
+  let vc = 1e9, needC = 0; const reach = Math.min(420, 30 + v * v / (2 * PP_DEC));
   for (let a = 0; a <= reach; a += 10) {
     const k = ctx.k(a); if (k <= 1e-4) continue;
     const vl = Math.sqrt(PP_ALAT / k);
     vc = Math.min(vc, Math.sqrt(vl * vl + 2 * PP_DEC * Math.max(0, a - 6)));                                    // ふだんの、気持ちのいい減速で間に合う速さ
-    if (v > vl) needC = Math.max(needC, (v * v - vl * vl) / (2 * Math.max(a - 6, 3)));                          // 先のカーブの限界速度から、PP_DEC m/s²で落とせる速さ(間に合わないときは、必要なぶんだけ強く減速: needC)
-    const vlSafe = Math.sqrt(PP_ALAT_SAFE / k);                                                                  // 曲がりきれるかの判定は、実際のグリップよりだいぶ手前(厳しめ)に見る
-    if (v > vlSafe && (v * v - vlSafe * vlSafe) / (2 * Math.max(a - 10, 3)) > PP_PANIC_DEC) panicC = true;      // それでも猶予がなければ、曲がりきれないと判断
+    if (v > vl) needC = Math.max(needC, (v * v - vl * vl) / (2 * Math.max(a - 9, 3)));                          // 先のカーブの限界速度に、9m手前には収まっているという厳しめの余裕で合わせる。間に合わないぶんだけ強く減速(needC)。1つの式で、軽い減速からフルブレーキまで連続して強くなる(急に切り替わらない)
   }
   const vt = Math.min(PP.set, vc);
   let aDes = clamp(.5 * (vt - v), -3, 1.6);
-  if (needC > 2.4) aDes = Math.min(aDes, -Math.min(needC, 6.5));         // カーブに間に合わなさそうなときは、強めにブレーキ
-  if (panicC) aDes = -9;                                                 // 曲がりきれないと判断: 全力の急ブレーキ(判定は厳しめ)
+  if (needC > 1.2) aDes = Math.min(aDes, -Math.min(needC, 9));           // カーブに間に合わなさそうなときは、必要なぶんだけ強く(最大でフルブレーキ)
   const lead = ppLead(c, ctx); PP.lead = lead;
   if (lead) {
     const gap = lead.gap, want = Math.max(PP_GAP_MIN, lead.v * 1.8);      // 前の車との車間は、時速(km/h)の半分ぐらいのm(≒1.8秒ぶん)を保つ。前の車の速さを基準にする(自分の速さだと、詰めている間じわじわ目標が動いて手前で減速してしまう)。止まる直前は最低8m

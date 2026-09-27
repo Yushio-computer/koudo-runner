@@ -582,6 +582,7 @@ function buildChunk(ci) {
   grp.add(trunks, crowns);
   const sm = course === 'smash' ? buildSmashObstacles(ci, grp) : null;      // 破壊ステージ: 障害物を敷き詰める
   scene.add(grp);
+  renderer.compile(scene, camera);                                          // ここで先にGPUへ転送・シェーダー準備までしておく(あとでいきなり描画するとき一瞬固まるのを防ぐ)
   chunks.set(ci, { grp, geos, inst: [posts, poles, heads, trunks, crowns, ...(sm ? Object.values(sm.meshes) : [])], trees: treeList, trunks, crowns, smash: sm });
 }
 function disposeChunk(ci) { const ch = chunks.get(ci); if (!ch) return; scene.remove(ch.grp); ch.geos.forEach(g => g.dispose()); ch.inst.forEach(m => m.dispose()); chunks.delete(ci); }

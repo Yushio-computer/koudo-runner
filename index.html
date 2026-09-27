@@ -2181,7 +2181,10 @@ function mkPath(pts, closed) {                            // 点列 → 道の�
 function pathProject(P, x, z) {                           // 位置 → 道の最寄り点: 道のり s・距離 dist・左方向の横ずれ lat(左が正=高架では街の内側)
   let bi = 0, bd = 1e18; const p = P.pts;
   for (let i = 0; i < P.n; i++) { const dx = x - p[i][0], dz = z - p[i][1], d2 = dx * dx + dz * dz; if (d2 < bd) { bd = d2; bi = i; } }
-  const t = P.T[bi]; return { i: bi, s: P.S[bi], dist: Math.sqrt(bd), lat: (x - p[bi][0]) * t[1] - (z - p[bi][1]) * t[0] };
+  const t = P.T[bi], ax = x - p[bi][0], az = z - p[bi][1], along = ax * t[0] + az * t[1];
+  const prev = bi > 0 ? P.S[bi] - P.S[bi - 1] : 2, next = bi < P.n - 1 ? P.S[bi + 1] - P.S[bi] : 2;                          // 頂点の間は補間する(高さが階段状にならないように)
+  let su = P.S[bi] + clamp(along, -prev, next); if (!P.closed) su = clamp(su, 0, P.len);
+  return { i: bi, s: su, dist: Math.sqrt(bd), lat: ax * t[1] - az * t[0] };
 }
 function pathAt(P, u, lane = 0) {                         // 道のり u の位置・向き(左に lane だけずらす)
   if (P.closed) u = ((u % P.len) + P.len) % P.len; let lo = 0, hi = P.n - 1;
@@ -2217,8 +2220,10 @@ const sideXY = (sd, a, b) => [sd.s0[0] + sd.f[0] * a + sd.inw[0] * b, sd.s0[1] +
 const RAMPS = [{ side: 'west', kind: 'off', a: 30 }, { side: 'south', kind: 'on', a: 83 }, { side: 'east', kind: 'off', a: 30 }, { side: 'north', kind: 'on', a: 83 }].map(d => {
   const sd = SIDES[d.side], B = DECK_OFF + CITY_LANE, a = d.a;                                          // B: 外周道路の反時計まわりの車線の位置
   const ctrl = d.kind === 'off' ? [[a, 1.8], [a + 35, 1.8], [a + 80, 10], [a + 125, 32], [a + 165, B], [a + 200, B]] : [[a, B], [a + 35, B], [a + 75, 32], [a + 120, 10], [a + 160, 1.8], [a + 195, 1.8]];
-  const P = mkPath(catmullPts(ctrl.map(([aa, bb]) => sideXY(sd, aa, bb)), 2), false);
-  return { ...d, ...P, half: RAMP_W / 2, y: sv => HW_H * (d.kind === 'off' ? 1 - smooth01((sv - 30) / (RAMP_UP - 30)) : smooth01((sv - 35) / (RAMP_UP - 35))) };   // 降りるランプは、分かれてから30mは高架と同じ高さ。乗るランプは、外周道路から分かれるまでの35mは地面のまま
+  const loc = catmullPts(ctrl, 2), P = mkPath(loc.map(([aa, bb]) => sideXY(sd, aa, bb)), false);
+  // 外周道路の車線から12m以上はなれるまで(=外周道路の2車線とその上の車を巻き込む間)は、ランプは地面の高さのまま。はなれてから登る/降りる
+  const sepI = d.kind === 'on' ? loc.findIndex(q => Math.abs(q[1] - B) > 12) : loc.length - 1 - [...loc].reverse().findIndex(q => Math.abs(q[1] - B) > 12), sSep = P.S[sepI];
+  return { ...d, ...P, half: RAMP_W / 2, sSep, y: sv => HW_H * (d.kind === 'off' ? 1 - smooth01((sv - 30) / (sSep - 30)) : smooth01((sv - sSep) / (RAMP_UP - sSep))) };   // 降りるランプは、分かれてから30mは高架と同じ高さ
 });
 const DECK_GAPS = RAMPS.map(rp => { const q = pathProject(DECK, ...(rp.kind === 'off' ? rp.pts[0] : rp.pts[rp.n - 1])); return rp.kind === 'off' ? [q.s - 8, q.s + 110] : [q.s - 100, q.s + 8]; });   // ランプがつながる所は、高架の内側の壁を切る
 const inDeckGap = sv => DECK_GAPS.some(([g0, g1]) => { const u = ((sv % DECK.len) + DECK.len) % DECK.len; return u >= g0 && u <= g1; });
@@ -2226,7 +2231,7 @@ function cityLevel(c) {                                            // 自車が�
   const cy = c.y || 0; let best = null;
   for (const rp of RAMPS) {
     const r = pathProject(rp, c.x, c.z), y = rp.y(r.s), ends = r.s < 20 || r.s > rp.len - 20, dy = Math.abs(cy - y);
-    if (r.dist < rp.half + (ends ? 1.5 : .6) && dy < (ends ? .9 : .6) && (!best || dy < best.dy)) best = { y, zone: 'ramp', rp, r, dy };
+    if (r.dist < rp.half + (ends ? 1.5 : .6) && dy < .1 && (!best || dy < best.dy)) best = { y, zone: 'ramp', rp, r, dy };
   }
   const d = pathProject(DECK, c.x, c.z), dyd = Math.abs(cy - HW_H);
   const laneDist = Math.min(Math.abs(d.lat - DECK_W / 4), Math.abs(d.lat + DECK_W / 4));
@@ -2243,7 +2248,7 @@ function cityDeckWalls(c) {                                        // 高架の�
 }
 function cityRampWalls(c) {                                        // ランプの両側の壁(高架や地上につながる端は壁なし)。高さのちがう地上の車には効かない
   for (const rp of RAMPS) {
-    const r = pathProject(rp, c.x, c.z), y = rp.y(r.s); if (y < .9 || Math.abs((c.y || 0) - y) > .6) continue;      // 壁がある高さ(地上から1m近く浮いた所)で、その路面に乗っている車だけ。下の地上の車は引っぱらない
+    const r = pathProject(rp, c.x, c.z), y = rp.y(r.s); if (y < .9 || Math.abs((c.y || 0) - y) > .3) continue;      // 壁がある高さ(地上から1m近く浮いた所)で、その路面に乗っている車だけ。下の地上の車は引っぱらない
     const s0 = rp.kind === 'off' ? 45 : 20, s1 = rp.kind === 'off' ? rp.len - 25 : rp.len - 45; if (r.s < s0 || r.s > s1) continue;
     const half = RAMP_W / 2 - .95; if (r.dist <= half || r.dist > RAMP_W / 2 + 8) continue;
     const P = rp.pts[r.i], nx = (c.x - P[0]) / (r.dist || 1), nz = (c.z - P[1]) / (r.dist || 1), ex = r.dist - half;
@@ -2372,7 +2377,7 @@ function cityBuild() {
     for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { ctx.fillStyle = (x + y) % 3 === 0 ? '#e8d890' : '#4a5a70'; ctx.fillRect(x * 32 + 6, y * 32 + 7, 20, 17); }
   });
   const matStreet = new THREE.MeshLambertMaterial({ map: streetTex }), matAsph = mat(0x3c3c42), matSide = mat(0xb4b4ac), matLot = new THREE.MeshLambertMaterial({ map: lotTex });
-  const matPaint = new THREE.MeshBasicMaterial({ color: 0xf0f0f0 }), matRoof = mat(0x8a8a86);
+  const matPaint = new THREE.MeshBasicMaterial({ color: 0xf0f0f0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }), matRoof = mat(0x8a8a86);
   const W = CITY_IW, ext = { x0: CITY_XS[0], x1: CITY_XS[5], z0: CITY_ZS[0], z1: CITY_ZS[4] };
   // --- 通り(東西・南北)
   const street = (x0, z0, x1, z1) => {
@@ -2425,7 +2430,7 @@ function cityBuild() {
   }
   // --- 首都高(外周の高架)と、降りる/乗るランプ: 路面・両側の壁・下の橋脚
   {
-    const rampMat = matAsph.clone(), wallMat = matSide.clone(); rampMat.side = wallMat.side = THREE.DoubleSide; rampMat.polygonOffset = true; rampMat.polygonOffsetFactor = -2; rampMat.polygonOffsetUnits = -2;   // 道路と重なる所でちらつかない
+    const rampMat = matAsph.clone(), wallMat = matSide.clone(); rampMat.side = wallMat.side = THREE.DoubleSide;
     const mk2 = (positions, index, material) => { const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); gg.setIndex(index); gg.computeVertexNormals(); return new THREE.Mesh(gg, material); };
     const corridor = (P, yFn, width, wallSkip) => {                  // wallSkip(s, side): その位置の壁を作らない(side: +1=左/-1=右)
       const n = P.n, segs = P.closed ? n : n - 1, pos = [], idx = [], wl = [], wr = [], hw2 = width / 2;
@@ -2739,7 +2744,7 @@ function cityRecover(sp) {                              // 街: いちばん近�
 }
 function cityPlaceCar(w) {
   const c = car; c.x = w.x; c.z = w.z; c.h = w.h; c.y = 0; c.vx = c.vz = 0; c.yaw = 0; c.steer = 0; c.s = 0; c.d = 0; c.roll = 0; c.pitch = 0; c.pitchV = 0; c.air = false; c.hop = 0; c.tumP = c.tumR = 0;
-  camH = w.h; c.prevVf = 0; c.outside = undefined; c.grass = false; city.sl.clear(); city.parkT = 0; city.mergeT = 0;
+  camH = w.h; c.prevVf = 0; c.outside = undefined; c.grass = false; city.sl.clear(); city.parkT = 0; city.mergeT = 0; city.onAccel = false;
 }
 function cityCollideStatic(c, dt) {
   const R = PLAYER.hit.r, Fx = Math.sin(c.h), Fz = Math.cos(c.h);
@@ -2803,7 +2808,7 @@ function cityStepPlayer(c, dt) {
   // --- 合流: 「乗る」ランプから高架へ入り、40km/h以上で3秒走ったら成功
   if (course !== 'city') return;
   const lv = cityLevel(c);
-  if (lv.zone === 'ramp' && lv.rp.kind === 'on' && lv.r.s > 30) city.onAccel = true;
+  if (lv.zone === 'ramp' && lv.rp.kind === 'on' && lv.y > .5) city.onAccel = true;      // 外周道路の上を通っただけでは数えない(実際に登り始めてから)
   if (city.onAccel && lv.zone === 'deck' && v > 11) { city.mergeT += dt; if (city.mergeT > 3) { score += 300; city.stats.merge++; popup('合流成功! +300', 'close'); sfxPass(); city.onAccel = false; city.mergeT = 0; } }
   else if (lv.zone !== 'deck') city.mergeT = 0;
   if (city.onAccel && lv.zone === 'ground') city.onAccel = false;

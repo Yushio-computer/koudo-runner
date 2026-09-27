@@ -2218,7 +2218,7 @@ const RAMPS = [{ side: 'west', kind: 'off', a: 30 }, { side: 'south', kind: 'on'
   const sd = SIDES[d.side], B = DECK_OFF + CITY_LANE, a = d.a;                                          // B: 外周道路の反時計まわりの車線の位置
   const ctrl = d.kind === 'off' ? [[a, 1.8], [a + 35, 1.8], [a + 80, 10], [a + 125, 32], [a + 165, B], [a + 200, B]] : [[a, B], [a + 35, B], [a + 75, 32], [a + 120, 10], [a + 160, 1.8], [a + 195, 1.8]];
   const P = mkPath(catmullPts(ctrl.map(([aa, bb]) => sideXY(sd, aa, bb)), 2), false);
-  return { ...d, ...P, half: RAMP_W / 2, y: sv => HW_H * (d.kind === 'off' ? 1 - smooth01((sv - 30) / (RAMP_UP - 30)) : smooth01(sv / RAMP_UP)) };   // 降りるランプは、分かれてから30mは高架と同じ高さ
+  return { ...d, ...P, half: RAMP_W / 2, y: sv => HW_H * (d.kind === 'off' ? 1 - smooth01((sv - 30) / (RAMP_UP - 30)) : smooth01((sv - 35) / (RAMP_UP - 35))) };   // 降りるランプは、分かれてから30mは高架と同じ高さ。乗るランプは、外周道路から分かれるまでの35mは地面のまま
 });
 const DECK_GAPS = RAMPS.map(rp => { const q = pathProject(DECK, ...(rp.kind === 'off' ? rp.pts[0] : rp.pts[rp.n - 1])); return rp.kind === 'off' ? [q.s - 8, q.s + 110] : [q.s - 100, q.s + 8]; });   // ランプがつながる所は、高架の内側の壁を切る
 const inDeckGap = sv => DECK_GAPS.some(([g0, g1]) => { const u = ((sv % DECK.len) + DECK.len) % DECK.len; return u >= g0 && u <= g1; });
@@ -2288,11 +2288,9 @@ function wallBox(c) {                                     // サーキットは�
   if (course !== 'tsukuba' && !isCity()) return;
   if (!WALL_BOX) WALL_BOX = {
     tsukuba: { x0: Math.min(...lapX) - 110, x1: Math.max(...lapX) + 110, z0: Math.min(...lapZ) - 110, z1: Math.max(...lapZ) + 110 },
-    city: { x0: CITY_XS[0] - 22, x1: CITY_XS[5] + 22, z0: CITY_ZS[0] - 22, z1: CITY_ZS[4] + 22 },        // 地上: 外周道路の外側22mまで(ランプの下にもぐらない)
-    high: { x0: DK.xL - 30, x1: DK.xR + 30, z0: DK.zT - 30, z1: DK.zB + 30 },                            // 高架・ランプの上: 高架の外側30m(そのまわりは壁で守られている)
+    city: { x0: DK.xL - 35, x1: DK.xR + 35, z0: DK.zT - 35, z1: DK.zB + 35 },                            // 世界の端: 高架・ランプ・外周道路をすべて含む箱(道路のそばで壁とケンカしない)
   };
-  const zone = course === 'tsukuba' ? '' : cityLevel(c).zone;
-  const b = course === 'tsukuba' ? WALL_BOX.tsukuba : zone === 'ground' ? WALL_BOX.city : WALL_BOX.high; let hit = false;
+  const b = course === 'tsukuba' ? WALL_BOX.tsukuba : WALL_BOX.city; let hit = false;
   if (c.x < b.x0) { c.x = b.x0; if (c.vx < 0) c.vx *= -.3; hit = true; } else if (c.x > b.x1) { c.x = b.x1; if (c.vx > 0) c.vx *= -.3; hit = true; }
   if (c.z < b.z0) { c.z = b.z0; if (c.vz < 0) c.vz *= -.3; hit = true; } else if (c.z > b.z1) { c.z = b.z1; if (c.vz > 0) c.vz *= -.3; hit = true; }
   if (hit) wallFeedback(c);
@@ -2427,7 +2425,7 @@ function cityBuild() {
   }
   // --- 首都高(外周の高架)と、降りる/乗るランプ: 路面・両側の壁・下の橋脚
   {
-    const rampMat = matAsph.clone(), wallMat = matSide.clone(); rampMat.side = wallMat.side = THREE.DoubleSide;
+    const rampMat = matAsph.clone(), wallMat = matSide.clone(); rampMat.side = wallMat.side = THREE.DoubleSide; rampMat.polygonOffset = true; rampMat.polygonOffsetFactor = -2; rampMat.polygonOffsetUnits = -2;   // 道路と重なる所でちらつかない
     const mk2 = (positions, index, material) => { const gg = new THREE.BufferGeometry(); gg.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3)); gg.setIndex(index); gg.computeVertexNormals(); return new THREE.Mesh(gg, material); };
     const corridor = (P, yFn, width, wallSkip) => {                  // wallSkip(s, side): その位置の壁を作らない(side: +1=左/-1=右)
       const n = P.n, segs = P.closed ? n : n - 1, pos = [], idx = [], wl = [], wr = [], hw2 = width / 2;
@@ -2438,9 +2436,12 @@ function cityBuild() {
       }
       const wIdxL = [], wIdxR = [];
       for (let i = 0; i < segs; i++) {
-        const j = (i + 1) % n; idx.push(2 * i, 2 * j, 2 * i + 1, 2 * i + 1, 2 * j, 2 * j + 1);
-        if (!wallSkip(P.S[i], 1)) wIdxL.push(2 * i, 2 * i + 1, 2 * j, 2 * i + 1, 2 * j + 1, 2 * j);
-        if (!wallSkip(P.S[i], -1)) wIdxR.push(2 * i, 2 * i + 1, 2 * j, 2 * i + 1, 2 * j + 1, 2 * j);
+        const j = (i + 1) % n, y1 = yFn(P.S[i]), y2 = yFn(P.S[j]);
+        if (y1 >= .12 || y2 >= .12) idx.push(2 * i, 2 * j, 2 * i + 1, 2 * i + 1, 2 * j, 2 * j + 1);            // 地面すれすれの所は、外周道路そのものなので路面を重ねない
+        if (y1 > .9 && y2 > .9) {                                                                                // 壁は、地面から1m以上浮いてから(それまでは道路にめり込んで見える)
+          if (!wallSkip(P.S[i], 1)) wIdxL.push(2 * i, 2 * i + 1, 2 * j, 2 * i + 1, 2 * j + 1, 2 * j);
+          if (!wallSkip(P.S[i], -1)) wIdxR.push(2 * i, 2 * i + 1, 2 * j, 2 * i + 1, 2 * j + 1, 2 * j);
+        }
       }
       g.add(mk2(pos, idx, rampMat), mk2(wl, wIdxL, wallMat), mk2(wr, wIdxR, wallMat));
       const under = pos.slice(); for (let i = 1; i < under.length; i += 3) under[i] -= .8; g.add(mk2(under, idx, wallMat));                 // 床板の下面
@@ -2596,7 +2597,7 @@ function cityEventsStep(dt) {
   if (city.evT <= 0) { city.evT = 25 + Math.random() * 20; if (city.events.length < 2 && Math.random() < .3) citySpawnEvent(); }
 }
 function citySpawnEvent() {
-  const crash = Math.random() < .45, onDeck = Math.random() < .3; let zl = crash ? 70 : 110;
+  const crash = Math.random() < .45, onDeck = Math.random() < .3; let zl = crash ? 90 : 240 + Math.random() * 100;          // 渋滞は長蛇(240〜340m)、事故は90m
   const wrecks = []; let ev;
   if (onDeck) {
     const lane = Math.random() < .5 ? DECK_W / 4 : -DECK_W / 4, ua = Math.random() * DECK.len, mid = pathAt(DECK, ua + zl / 2, lane);
@@ -2604,10 +2605,16 @@ function citySpawnEvent() {
     if (crash) for (let k = 0; k < 2; k++) { const q = pathAt(DECK, ua + zl - 2 - k * 5.5, lane); wrecks.push({ x: q.x, z: q.z, h: q.h + (k ? -.5 : .35), y: HW_H }); }
   } else {
     const list = city.edges.filter(e => e.u1 - e.u0 > 60); const e = list[Math.floor(Math.random() * list.length)]; if (!e) return;
-    zl = Math.min(zl, e.u1 - e.u0 - 30);                                // 通りの1区間(交差点から交差点)は短いので、その中におさまる長さにする(渋滞の列は手前の道まで伸びる)
-    const ua = e.u0 + 8 + Math.random() * Math.max(1, e.u1 - e.u0 - zl - 26), at = u => ({ x: e.ax + e.dx * u + e.lx * e.off, z: e.az + e.dz * u + e.lz * e.off });
-    const mid = at(ua + zl / 2); if (Math.hypot(mid.x - car.x, mid.z - car.z) < 70) return;
-    ev = { type: crash ? 'crash' : 'jam', kind: 'edge', e, ua, zl, x: mid.x, z: mid.z };
+    if (crash) zl = Math.min(zl, e.u1 - e.u0 - 30);                     // 事故は1区間(交差点から交差点)の中に。渋滞は、先の道へつながって長い列になる
+    const ua = crash ? e.u0 + 8 + Math.random() * Math.max(1, e.u1 - e.u0 - zl - 26) : e.u0 + 8 + Math.random() * Math.max(1, e.u1 - e.u0 - 30), at = u => ({ x: e.ax + e.dx * u + e.lx * e.off, z: e.az + e.dz * u + e.lz * e.off });
+    let segs = null, mid = at(ua + zl / 2);
+    if (!crash) {                                                        // 渋滞: 直進(なければ左折)の道をつないで、長い列にする
+      segs = []; let rem = zl, se = e, sa = ua, tot = 0;
+      while (se && rem > 1 && segs.length < 8) { const sb = Math.min(se.u1, sa + rem); segs.push({ e: se, a: sa, b: sb }); rem -= sb - sa; tot += sb - sa; se = se.next.straight || se.next.left; sa = se ? se.u0 : 0; }
+      zl = tot; let half = zl / 2; for (const g of segs) { if (half <= g.b - g.a) { const u = g.a + half; mid = { x: g.e.ax + g.e.dx * u + g.e.lx * g.e.off, z: g.e.az + g.e.dz * u + g.e.lz * g.e.off }; break; } half -= g.b - g.a; }
+    }
+    if (Math.hypot(mid.x - car.x, mid.z - car.z) < 70) return;
+    ev = { type: crash ? 'crash' : 'jam', kind: 'edge', e, ua, zl, x: mid.x, z: mid.z, segs };
     if (crash) for (let k = 0; k < 2; k++) { const q = at(ua + zl - 2 - k * 5.5); wrecks.push({ x: q.x, z: q.z, h: e.h + (k ? -.5 : .35), y: 0 }); }
   }
   const pool = (city.wreckPool || []).filter(t => !t.active);
@@ -2618,11 +2625,15 @@ function cityEventCap(S) {                                          // その車
   let cap = 1e9;
   for (const ev of city.events) {
     let du;
-    if (ev.kind === 'edge') { if (S.mode !== 'edge' || S.edge !== ev.e) continue; du = S.u - ev.ua; }
-    else { if (S.mode !== 'deck' || Math.abs(S.lane - ev.lane) > .1) continue; du = ((S.u - ev.ua) % DECK.len + DECK.len) % DECK.len; if (du > DECK.len - 70) du -= DECK.len; }
+    if (ev.kind === 'edge' && ev.segs) {                             // 渋滞(つながった道): どれかの区間にいれば徐行、先頭区間の手前からは徐々に落とす
+      if (S.mode !== 'edge') continue; const gi = ev.segs.findIndex(g => g.e === S.edge); if (gi < 0) continue;
+      const g = ev.segs[gi]; if (S.u > g.b) continue; du = gi ? 0 : S.u - g.a;
+    }
+    else if (ev.kind === 'edge') { if (S.mode !== 'edge' || S.edge !== ev.e) continue; du = S.u - ev.ua; }
+    else { if (S.mode !== 'deck' || Math.abs(S.lane - ev.lane) > .1) continue; du = ((S.u - ev.ua) % DECK.len + DECK.len) % DECK.len; if (du > DECK.len - 120) du -= DECK.len; }
     if (du > ev.zl) continue;                                       // 区間を過ぎた
     const slow = 3.5;                                                // 渋滞のときの速さ(m/s、約12km/h)
-    if (du < 0) cap = Math.min(cap, Math.sqrt(slow * slow + 5 * -du));   // 手前: 2.5m/s²で落としていく
+    if (du < 0) cap = Math.min(cap, Math.sqrt(slow * slow + 3 * -du));   // 手前: 1.5m/s²でゆっくり落としていく(列の最後尾が手前へ伸びる)
     else if (ev.type === 'crash') cap = Math.min(cap, Math.min(slow + 2, Math.sqrt(6 * Math.max(0, ev.zl - 9 - du))));   // 事故: 事故車の9m手前で止まる
     else cap = Math.min(cap, slow);
   }
@@ -2838,7 +2849,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
+window.G = { renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
 </script>
 </body>
 </html>

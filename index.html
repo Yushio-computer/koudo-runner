@@ -2226,7 +2226,7 @@ function cityLevel(c) {                                            // 自車が�
   const cy = c.y || 0; let best = null;
   for (const rp of RAMPS) {
     const r = pathProject(rp, c.x, c.z), y = rp.y(r.s), ends = r.s < 20 || r.s > rp.len - 20, dy = Math.abs(cy - y);
-    if (r.dist < rp.half + (ends ? 3 : .6) && dy < 1.0 + (ends ? .4 : 0) && (!best || dy < best.dy)) best = { y, zone: 'ramp', rp, r, dy };
+    if (r.dist < rp.half + (ends ? 1.5 : .6) && dy < (ends ? .9 : .6) && (!best || dy < best.dy)) best = { y, zone: 'ramp', rp, r, dy };
   }
   const d = pathProject(DECK, c.x, c.z), dyd = Math.abs(cy - HW_H);
   const laneDist = Math.min(Math.abs(d.lat - DECK_W / 4), Math.abs(d.lat + DECK_W / 4));
@@ -2243,7 +2243,7 @@ function cityDeckWalls(c) {                                        // 高架の�
 }
 function cityRampWalls(c) {                                        // ランプの両側の壁(高架や地上につながる端は壁なし)。高さのちがう地上の車には効かない
   for (const rp of RAMPS) {
-    const r = pathProject(rp, c.x, c.z), y = rp.y(r.s); if (Math.abs((c.y || 0) - y) > 2.2) continue;
+    const r = pathProject(rp, c.x, c.z), y = rp.y(r.s); if (y < .9 || Math.abs((c.y || 0) - y) > .6) continue;      // 壁がある高さ(地上から1m近く浮いた所)で、その路面に乗っている車だけ。下の地上の車は引っぱらない
     const s0 = rp.kind === 'off' ? 45 : 20, s1 = rp.kind === 'off' ? rp.len - 25 : rp.len - 45; if (r.s < s0 || r.s > s1) continue;
     const half = RAMP_W / 2 - .95; if (r.dist <= half || r.dist > RAMP_W / 2 + 8) continue;
     const P = rp.pts[r.i], nx = (c.x - P[0]) / (r.dist || 1), nz = (c.z - P[1]) / (r.dist || 1), ex = r.dist - half;

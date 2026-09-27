@@ -1743,7 +1743,7 @@ function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色
   freqs.forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * gap; o.type = type; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g).connect(master); o.start(t); o.stop(t + dur + .03); });
 }
 const ppMsg = (text, sec = 2.6) => { PP.msg = text; PP.msgT = sec; };
-function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.msgT = 0; }
+function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.hudT = 0; PP.msgT = 0; }
 function ppCancel(why, quiet) { const was = PP.state; ppReset(); if (was === 'on') { if (!quiet) ppTone([1175, 1175, 1175], .17, .11, 'sine', .15); ppMsg(why || 'ProPILOT 解除', 3); } else if (was === 'search') ppMsg(why || '準備をやめました', 2.4); }
 function ppCtx(c) {                                                     // ProPILOTが使える道の上にいるか。いれば、その道の座標関数を返す
   if (course === 'public') {
@@ -1870,8 +1870,10 @@ function ppStep(dt) {                                                   // 毎�
   PP.thr = Math.max(u, 0); PP.brk = Math.min(1, Math.max(-u, 0));
   if (v < .6 && aDes <= .3) { PP.thr = PP.brk = 0; PP.u = 0; }          // 止まったら、そのまま止まっている(後ろへ動き出さない)
 }
-function ppHud() {                                                      // 水色のパネル。中身が変わったときだけ書き換える
+function ppHud(dt) {                                                    // 水色のパネル。中身が変わったときだけ書き換える。毎フレーム作り直すと重いので、表示の更新は1秒に約8回に間引く
   const el = $('pp'); if (!el) return;
+  PP.hudT = (PP.hudT || 0) - (dt || 0);
+  if (PP.hudT > 0 && PP.state !== 'off') return; PP.hudT = .12;
   const c = car, v = Math.hypot(c.vx, c.vz) * 3.6;
   let mode = 'off', body = '';
   const wheel = '<svg viewBox="0 0 40 40" width="22" height="22" style="vertical-align:-5px;margin-right:6px"><circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="20" cy="20" r="3.5" fill="currentColor"/><path d="M5.5 19 L16.5 19 M23.5 19 L34.5 19 M20 23.5 L20 35" stroke="currentColor" stroke-width="3.5" fill="none"/></svg>';
@@ -2170,7 +2172,9 @@ const miniBase = (() => {                  // コースの形(1周ぶん)を一�
   g.fillStyle = '#fff'; g.fillRect(lapX[0] * sc + ox - 4, lapZ[0] * sc + oz - 1.5, 8, 3);        // スタートライン
   return { cv, sc, ox, oz };
 })();
-function drawMini() {
+let miniT = 0;
+function drawMini(dt) {                                              // 毎フレーム描き直すと重いので、1秒に約20回に間引く(信号や車の動きは、それぐらいの間隔でも滑らかに見える)
+  miniT -= dt; if (miniT > 0) return; miniT = .05;
   if (isCity()) { cityDrawMini(); return; }                       // ミニマップ: コース全体を固定表示し、ライバルは色つきの正方形、自機は黄色の三角で動く
   if (course !== 'tsukuba') { mini.style.display = 'none'; return; }
   mini.style.display = 'block'; mctx.clearRect(0, 0, MINI, MINI); mctx.drawImage(miniBase.cv, 0, 0);
@@ -2211,9 +2215,9 @@ function drawG(dt) {                                    // Gの表示値を更�
   gDisp.long += (car.accel / G_ACC - gDisp.long) * k; gDisp.lat += (car.aLat / G_ACC - gDisp.lat) * k;
 }
 let hudTick = 0;
-function updateHud() {
+function updateHud(dt) {
   const kmh = Math.hypot(car.vx, car.vz) * 3.6;
-  $('spd').textContent = Math.round(kmh); ppHud();
+  $('spd').textContent = Math.round(kmh); ppHud(dt);
   $('gear').textContent = (Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5 ? 'R' : VEH.powertrain.type === 'ice' ? String(car.gear || 1) : VEH.powertrain.coastB ? decelSel : 'D') + '  ' + M.name + (ePedal && VEH.powertrain.type !== 'ice' ? '  e-Pedal' : '');
   $('rpm').style.width = car.out * 100 + '%';
   { const ht = hyInfoText(); if ($('hyInfo').textContent !== ht) $('hyInfo').textContent = ht; }
@@ -3036,7 +3040,7 @@ function frame(now) {
   if (dt > 0) {
     drawG(dt); if (course === 'straight') updateDrag(dt);
     updateRace(dt); stepPlayer(dt); stepTraffic(dt); updateLap(dt); updateRpm(dt); updateChunks(car.s);
-    updateParts(dt); updateDebris(dt); updateFire(dt); updateCamera(dt); updateFx(dt); updateHud(); drawMini();
+    updateParts(dt); updateDebris(dt); updateFire(dt); updateCamera(dt); updateFx(dt); updateHud(dt); drawMini(dt);
     updateAudio(car.thr, Math.hypot(car.vx, car.vz) * 3.6, car.slip, nitroOn, scraping);
   }
   renderer.render(scene, camera);

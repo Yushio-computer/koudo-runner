@@ -429,13 +429,13 @@ function ensure(n) {
     PH.push(h1); PY.push(elev(m * STEP));
   }
 }
-function centerAt(s) {
+function centerAt(s, out) {                           // out: 渡すと、そこへ書き込んで使い回す(毎フレーム呼ばれる場所でのオブジェクト作りすぎを避ける)。渡さなければ今までどおり新しく作る
   const n = Math.max(0, s) / STEP, i = Math.floor(n), t = n - i;
   ensure(i + 2);
-  return {
-    x: lerp(PX[i], PX[i + 1], t), y: lerp(PY[i], PY[i + 1], t), z: lerp(PZ[i], PZ[i + 1], t),
-    h: lerp(PH[i], PH[i + 1], t), sl: (PY[i + 1] - PY[i]) / STEP, k: (PH[i + 1] - PH[i]) / STEP   // k: 曲率(1/半径)
-  };
+  const o = out || {};
+  o.x = lerp(PX[i], PX[i + 1], t); o.y = lerp(PY[i], PY[i + 1], t); o.z = lerp(PZ[i], PZ[i + 1], t);
+  o.h = lerp(PH[i], PH[i + 1], t); o.sl = (PY[i + 1] - PY[i]) / STEP; o.k = (PH[i + 1] - PH[i]) / STEP;   // k: 曲率(1/半径)
+  return o;
 }
 function nearestLapNode(x, z) {
   const cx = Math.floor(x / GRID), cz = Math.floor(z / GRID); let best = 1e18, bi = -1;
@@ -1569,11 +1569,13 @@ function rivalStep(t, dt) {              // ライバルの走行(自車が速�
   const dT = clamp(t.passT > 0 ? t.passD : sk.dTarget, -5.6, 5.6);
   t.d += clamp(dT - t.d, -1.6 * dt, 1.6 * dt);
 }
+const _csTmp = {};                      // curveSpeedで使い回すオブジェクト(毎フレーム・車の台数ぶん呼ばれるので、作りすぎを避ける)
 function curveSpeed(t) {                // カーブの手前から減速する(先の曲率が大きいほど遅く)。ヘアピンで極端に速く走らないように
-  let k = 0;
-  for (const a of t.dir > 0 ? [0, 25, 50] : [0, -25, -50]) k = Math.max(k, Math.abs(centerAt(Math.max(0, t.s + a)).k));
+  let k = 0, sg = t.dir > 0 ? 1 : -1;
+  for (let i = 0; i < 3; i++) k = Math.max(k, Math.abs(centerAt(Math.max(0, t.s + sg * i * 25), _csTmp).k));
   return k > 1e-4 ? Math.sqrt(5.5 / k) : 1e9;
 }
+const _ccTmp = {};                      // stepTrafficで使い回すオブジェクト(毎フレーム・車の台数ぶん呼ばれるので、作りすぎを避ける)
 function stepTraffic(dt) {
   const c = car, active = state === 'play';
   // 貫通: ニトロ発動中は車をすり抜ける。ニトロが切れた瞬間に車と重なっていたら、抜けきるまで(最大2秒)貫通を続ける
@@ -1627,7 +1629,7 @@ function stepTraffic(dt) {
     t.s += t.vs * dt; t.d = clamp(t.d + t.vd * dt, -CAR_LIM + 1, CAR_LIM - 1); t.yaw += t.spin * dt;
     // 画面外の車を前方へ再配置
     if (!t.rival && (t.s < c.s - 130 || t.s > c.s + 1100)) respawn(t, c.s + 520, c.s + 950);
-    const cc = centerAt(t.s);
+    const cc = centerAt(t.s, _ccTmp);
     t.roadH = cc.h; t.sl = cc.sl;
     t.x = cc.x + Math.cos(cc.h) * t.d; t.z = cc.z - Math.sin(cc.h) * t.d;
     t.heading = cc.h + (t.dir < 0 ? Math.PI : 0) + t.yaw;
@@ -2378,13 +2380,13 @@ function pathProject(P, x, z) {                           // 位置 → 道の�
   let su = P.S[bi] + clamp(along, -prev, next); if (!P.closed) su = clamp(su, 0, P.len);
   return { i: bi, s: su, dist: Math.sqrt(bd), lat: ax * t[1] - az * t[0] };
 }
-function pathAt(P, u, lane = 0) {                         // 道のり u の位置・向き(左に lane だけずらす)
+function pathAt(P, u, lane = 0, out) {                    // 道のり u の位置・向き(左に lane だけずらす)。outを渡すと使い回す
   if (P.closed) u = ((u % P.len) + P.len) % P.len; let lo = 0, hi = P.n - 1;
   while (hi - lo > 1) { const m = (lo + hi) >> 1; if (P.S[m] <= u) lo = m; else hi = m; }
   const nx = lo + 1 < P.n ? lo + 1 : 0, sA = P.S[lo], sB = lo + 1 < P.n ? P.S[lo + 1] : P.len, t = clamp((u - sA) / ((sB - sA) || 1), 0, 1);
   const A = P.pts[lo], B = P.pts[nx], tx = P.T[lo][0] + (P.T[nx][0] - P.T[lo][0]) * t, tz = P.T[lo][1] + (P.T[nx][1] - P.T[lo][1]) * t, l = Math.hypot(tx, tz) || 1;
   const x = A[0] + (B[0] - A[0]) * t, z = A[1] + (B[1] - A[1]) * t, ux = tx / l, uz = tz / l;
-  return { x: x + uz * lane, z: z - ux * lane, h: Math.atan2(ux, uz) };
+  const o = out || {}; o.x = x + uz * lane; o.z = z - ux * lane; o.h = Math.atan2(ux, uz); return o;
 }
 function catmullPts(P, step) {                            // 通る点 P から、なめらかな点列(約step間隔)を作る
   const out = [], n = P.length;
@@ -2769,7 +2771,8 @@ function cityPlaceDeckAI(t, n) {                                   // 高架の�
   t.city = { mode: 'deck', u, lane, v: 12, cruise: lane > 0 ? 17 + Math.random() * 2 : 22 + Math.random() * 2, c: null };
   cityDeckPose(t);
 }
-function cityDeckPose(t) { const S = t.city, q = pathAt(DECK, S.u, S.lane); t.x = q.x; t.z = q.z; t.heading = q.h + (t.yaw || 0); t.roadH = q.h; t.vs = S.v; t.m.group.position.set(t.x, HW_H, t.z); t.m.group.rotation.set(0, t.heading, 0); }
+const _deckTmp = {};                    // cityDeckPoseで使い回すオブジェクト(毎フレーム・高架の車の台数ぶん呼ばれるので、作りすぎを避ける)
+function cityDeckPose(t) { const S = t.city, q = pathAt(DECK, S.u, S.lane, _deckTmp); t.x = q.x; t.z = q.z; t.heading = q.h + (t.yaw || 0); t.roadH = q.h; t.vs = S.v; t.m.group.position.set(t.x, HW_H, t.z); t.m.group.rotation.set(0, t.heading, 0); }
 function cityDeckStep(t, S, dt, active) {
   const L = DECK.len;
   if (t.hit) { S.v *= Math.exp(-2.5 * dt); t.hitT = (t.hitT || 0) + dt; if (t.hitT > 2.5) { t.hit = false; t.hitT = 0; t.yaw = 0; t.spin = 0; } else { t.yaw = (t.yaw || 0) + (t.spin || 0) * dt; t.spin *= Math.exp(-1.5 * dt); } }
@@ -3036,9 +3039,8 @@ updateChunks(60, 99);
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setDriveMode(b.dataset.mode, false); }));
 document.querySelectorAll('[data-course]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (state === 'ready' || state === 'over') setCourse(b.dataset.course); }));
 let last = performance.now();
-let diagT0 = 0, diagWorst = 0, diagWorstLogic = 0, diagWorstRender = 0, diagOver = 0, diagN = 0;   // 重いフレームを見つけるための一時的な計測(コンソールに数秒おきに出す。原因が分かったら消す)
+// ---- 重いフレームを見つけるための一時的な計測(原因が分かったら、ここからdiagEl関連もまとめて消す) ----
 function frame(now) {
-  const fStart = performance.now();
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (dt > 0) {
     drawG(dt); if (course === 'straight') updateDrag(dt);
@@ -3046,16 +3048,7 @@ function frame(now) {
     updateParts(dt); updateDebris(dt); updateFire(dt); updateCamera(dt); updateFx(dt); updateHud(dt); drawMini(dt);
     updateAudio(car.thr, Math.hypot(car.vx, car.vz) * 3.6, car.slip, nitroOn, scraping);
   }
-  const logicEnd = performance.now();
   renderer.render(scene, camera);
-  const renderEnd = performance.now();
-  const total = renderEnd - fStart, logic = logicEnd - fStart, rend = renderEnd - logicEnd;
-  diagN++; diagWorst = Math.max(diagWorst, total); diagWorstLogic = Math.max(diagWorstLogic, logic); diagWorstRender = Math.max(diagWorstRender, rend);
-  if (total > 33) diagOver++;
-  if (now - diagT0 > 3000) {
-    console.log(`[perf] ${diagN}フレーム中、33ms超え(30fps未満)${diagOver}回。最悪: 全体${diagWorst.toFixed(1)}ms (ゲーム進行${diagWorstLogic.toFixed(1)}ms / 描画${diagWorstRender.toFixed(1)}ms)`);
-    diagT0 = now; diagWorst = diagWorstLogic = diagWorstRender = diagOver = diagN = 0;
-  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

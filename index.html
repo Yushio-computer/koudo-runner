@@ -58,6 +58,22 @@
   .courses button.on{background:#fff;color:#000;border-color:#fff}
   .keys{display:inline-block;text-align:left;margin-top:10px;font-size:14px;line-height:1.9}
   .keys kbd{background:#fff;color:#000;border-radius:4px;padding:1px 7px;margin-right:6px;font-size:12px;font-weight:700}
+  #pp{left:50%;bottom:96px;transform:translateX(-50%);display:none;min-width:230px;padding:7px 16px 8px;border-radius:12px;text-align:center;color:#bff0ff;border:2px solid rgba(76,208,255,.55);background:rgba(8,44,68,.55);box-shadow:0 0 18px rgba(76,208,255,.25)}
+  #pp.hint{min-width:0;padding:3px 12px;border-width:1px;background:rgba(8,44,68,.35);box-shadow:none;opacity:.8}
+  #pp.on{border-color:#4cd0ff;background:rgba(10,70,105,.6);box-shadow:0 0 22px rgba(76,208,255,.55)}
+  #pp.search{animation:ppp 1.1s ease-in-out infinite}
+  @keyframes ppp{50%{box-shadow:0 0 26px rgba(76,208,255,.7)}}
+  #pp .ppt{font-size:16px;font-weight:800;letter-spacing:.06em;color:#4cd0ff}
+  #pp .ppt span{font-size:12px;font-weight:700;color:#bff0ff;letter-spacing:.02em}
+  #pp .pps{font-size:12px;margin-top:2px;color:#bff0ff}
+  #pp .pps b{font-size:16px;color:#7fdcff}
+  #pp .pps.warn{color:#ffe08a}
+  #pp .ppc{display:flex;gap:16px;justify-content:center;margin-top:3px;font-size:13px}
+  #pp .ppc b{font-weight:700;opacity:.65}
+  #pp .ppc b.ok{opacity:1;color:#7fdcff}
+  #pp .ppb{height:5px;border-radius:3px;background:rgba(0,0,0,.4);margin:5px 0 2px;overflow:hidden}
+  #pp .ppb i{display:block;height:100%;background:#4cd0ff}
+  #pp kbd{background:#4cd0ff;color:#04283c;border-radius:4px;padding:0 6px;font-size:11px;font-weight:800;margin-right:4px}
 </style>
 </head>
 <body>
@@ -75,6 +91,7 @@
   <div id="tr"><div>DIST <b id="dist">0.0</b> km</div><div class="bar"><i id="hp" style="width:100%"></i></div><div style="font-size:11px">車体</div></div>
   <div id="br"><span id="spd">0</span><small>km/h</small><div id="gear">D</div><div class="bar" style="width:200px;margin-left:auto"><i id="rpm"></i></div><div id="rpmLabel" style="font-size:11px">モーター出力</div><div id="hyInfo" style="font-size:12px;line-height:1.35;opacity:.95;max-width:340px;margin-left:auto;text-align:right"></div><div id="battWrap"><div class="bar" style="width:200px;margin-left:auto"><i id="batt"></i></div><div style="font-size:11px">バッテリー</div></div></div>
   <div id="bc"><div class="bar"><i id="nit" style="width:100%"></i></div>NITRO&nbsp;[Shift]<br><span style="opacity:.8">発動中は車を貫通・時間とすり抜けで回復</span></div>
+  <div id="pp"></div>
   <div id="pop"></div>
 </div>
 
@@ -91,7 +108,7 @@
       <div style="opacity:.85">スタート画面:　<kbd>A</kbd><kbd>D</kbd>コース選択　<kbd>W</kbd><kbd>S</kbd>車種選択　<kbd>Enter</kbd>/<kbd>Space</kbd>スタート</div>
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
       <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
-      <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF</div>
+      <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF</div>
     </div>
     <div class="go">Enter かクリックでスタート</div>
   </div>
@@ -840,6 +857,7 @@ addEventListener('keydown', e => {
   if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = 1; e.preventDefault(); }
   if (e.repeat) return;
   if (e.code === 'KeyC') camMode = 1 - camMode;
+  if (e.code === 'KeyP') ppToggle();
   if ((e.code === 'Digit1' || e.code === 'Numpad1') && (state === 'ready' || state === 'over')) setCourse('public');
   if ((e.code === 'Digit2' || e.code === 'Numpad2') && (state === 'ready' || state === 'over')) setCourse('tsukuba');
   if ((e.code === 'Digit3' || e.code === 'Numpad3') && (state === 'ready' || state === 'over')) setCourse('straight');
@@ -1340,6 +1358,7 @@ let score = 0, dist = 0, combo = 0, comboT = 0, shake = 0, maxKmh = 0, nitroOn =
 let ghost = false, ghostOverlap = false, ghostHold = 0;   // 貫通(ニトロ発動中は車をすり抜ける)
 
 function placeCar(s, d, speed) {
+  ppReset();
   if (isCity()) { cityPlaceCar(CITY_WARPS[city.warpI = 0]); return; }
   const c = centerAt(s), L = [Math.cos(c.h), -Math.sin(c.h)];
   car.x = c.x + L[0] * d; car.z = c.z + L[1] * d; car.h = c.h; car.y = c.y;
@@ -1375,7 +1394,7 @@ function restart() {
   $('ovOver').classList.remove('on');
   if (course === 'tsukuba') beginCountdown(); else state = 'play';
 }
-const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して10m吹き飛ぶ)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、外周の高架(首都高)へ「入」のランプから乗って合流する。高架は外周を1周していて、「出」のランプで降りられる。渋滞・事故渋滞は、ミニマップのアイコン(オレンジの丸=渋滞、赤い三角=事故)でわかる。右上のミニマップで信号・目標を確認(T でワープ)。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
+const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して10m吹き飛ぶ)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、外周の高架(首都高)へ「入」のランプから乗って合流する。高架は外周を1周していて、「出」のランプで降りられる。渋滞・事故渋滞は、ミニマップのアイコン(オレンジの丸=渋滞、赤い三角=事故)でわかる。右上のミニマップで信号・目標を確認(T でワープ)。高架の上ではセレナの P キーで ProPILOT が使える。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。セレナなら P キーで ProPILOT(車線を保って前の車に追従)が使える。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
 function refreshCourseUI() {
   document.querySelectorAll('[data-course]').forEach(b => b.classList.toggle('on', b.dataset.course === course));
   $('courseDesc').textContent = COURSE_DESC[course];
@@ -1708,18 +1727,173 @@ function collide(t) {
 function damage(v) { if (DAMAGE_ENABLED) car.health = Math.max(0, car.health - v * (course === 'tsukuba' ? RACE_DMG : 1)); combo = 0; }   // ダメージ無効中も、ぶつかるとコンボは切れる
 
 /* =====================================================================
+   ProPILOT(セレナ専用): 公道(ステージ1)と、都市マップの高架の高速道路だけで使える運転支援
+   ・Pキーで「準備中」: カメラが車線と前方の車を見つけるまで少し待つ(車線を1秒以上とらえたら作動)
+   ・作動したときの速さが「設定速度」。車線の中央を走り、前の車がいれば車間をあけて追従、カーブの手前で自動で減速
+   ・ブレーキ(S/↓)・サイドブレーキ・もう一度P・道路を出るで解除。アクセルを踏むと加速(離すと設定速度へ戻る)。ハンドルを切ると車線維持を一時停止(車線変更もできる)
+   ===================================================================== */
+const PP = { state: 'off', t: 0, set: 0, laneT: 0, thr: 0, brk: 0, steer: 0, u: 0, vPrev: 0, aMeas: 0, lead: null, laneSeen: 0, leadSeen: false, steerOvr: 0, accOvr: false, lostT: 0, msg: '', msgT: 0, hud: '', ldA: 1.3, ldB: 8, ki: 0, kE: 0, kH: 0, kL: 0, kC: 100, cmdLP: undefined, leadId: null, leadV: 0, aLead: 0 };
+const PP_LEN = 4.7, PP_TGAP = 1.7, PP_ALAT = 4.0, PP_DEC = 2.6;                     // 自車の長さ・車間時間(秒)・カーブで許す横加速度(m/s²)
+const ppAvail = () => vehicleId === 'serena' && (course === 'public' || course === 'city');
+function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色のシステム音(サイン波の柔らかいチャイム)
+  if (!ac) return; const t0 = ac.currentTime;
+  freqs.forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * gap; o.type = type; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g).connect(master); o.start(t); o.stop(t + dur + .03); });
+}
+const ppMsg = (text, sec = 2.6) => { PP.msg = text; PP.msgT = sec; };
+function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.msgT = 0; }
+function ppCancel(why, quiet) { const was = PP.state; ppReset(); if (was === 'on') { if (!quiet) ppTone([1175, 1175, 1175], .17, .11, 'sine', .15); ppMsg(why || 'ProPILOT 解除', 3); } else if (was === 'search') ppMsg(why || '準備をやめました', 2.4); }
+function ppCtx(c) {                                                     // ProPILOTが使える道の上にいるか。いれば、その道の座標関数を返す
+  if (course === 'public') {
+    if (c.outside || c.d < .3 || c.d > 7.4 || Math.abs(angDiff(c.h, c.roadH)) > .6) return null;
+    const s = c.s;
+    return { kind: 'road', s, lat: c.d, hh: c.roadH, lanes: [1.8, 5.4],
+      at: (u, lane) => { const q = centerAt(s + u); return { x: q.x + Math.cos(q.h) * lane, z: q.z - Math.sin(q.h) * lane }; },
+      k: u => Math.abs(centerAt(s + u).k) };
+  }
+  if (course === 'city') {
+    if (cityLevel(c).zone !== 'deck') return null;
+    const p = pathProject(DECK, c.x, c.z), hh = pathAt(DECK, p.s, 0).h;
+    if (Math.abs(angDiff(c.h, hh)) > .6 || Math.abs(p.lat) > DECK_W / 2) return null;
+    const s = p.s;
+    return { kind: 'deck', s, lat: p.lat, hh, lanes: [DECK_W / 4, -DECK_W / 4],
+      at: (u, lane) => pathAt(DECK, s + u, lane),
+      k: u => Math.abs(angDiff(pathAt(DECK, s + u + 8, 0).h, pathAt(DECK, s + u, 0).h)) / 8 };
+  }
+  return null;
+}
+function ppLead(c, ctx) {                                               // 自分の車線の前方にいる、いちばん近い車(止まっている事故車も)。gap: 車間(m)、v: その車の進む速さ
+  let best = null; const L = DECK.len;
+  for (const t of traffic) {
+    if (!t.active) continue;
+    let gap, v;
+    if (ctx.kind === 'road') {
+      if (t.rival || Math.min(Math.abs(t.d - PP.laneT), Math.abs(t.d - ctx.lat)) > 2.1 + (t.hit ? 2.5 : 0)) continue;      // ぶつかって滑っている車は、車線の横まではみ出してくるので広めに見る
+      const a = t.s - car.s; if (a < 0 || a > 180) continue;
+      gap = a - (t.l + PP_LEN) / 2; v = t.vs;
+    } else {
+      let u, lane;
+      if (t.city && t.city.mode === 'deck') { u = t.city.u; lane = t.city.lane; v = t.city.v; }
+      else if (t.parked && t.m.group.position.y > 3) { const p = pathProject(DECK, t.x, t.z); u = p.s; lane = p.lat; v = 0; }
+      else continue;
+      if (Math.abs(lane - PP.laneT) > 2.1) continue;
+      const a = (((u - ctx.s) % L) + L) % L; if (a > 180) continue;
+      gap = a - (t.l + PP_LEN) / 2;
+    }
+    if (!best || gap < best.gap) best = { gap: Math.max(0, gap), v, id: t };
+  }
+  return best;
+}
+const ppNearLane = (ctx, lat) => ctx.lanes.reduce((b, l) => Math.abs(l - lat) < Math.abs(b - lat) ? l : b, ctx.lanes[0]);
+function ppToggle() {
+  if (state !== 'play' || !ppAvail()) return;
+  if (PP.state !== 'off') { ppCancel('ProPILOT 解除'); return; }
+  const ctx = ppCtx(car);
+  if (!ctx) { ppMsg(course === 'city' ? 'ProPILOTは 高架の高速道路 の上で使えます' : 'ProPILOTは 車線の中を走っているときに使えます'); ppTone([330, 247], .12, .22, 'triangle', .14); return; }
+  PP.state = 'search'; PP.t = 0; PP.laneSeen = 0; PP.leadSeen = false; PP.lostT = 0; PP.laneT = ppNearLane(ctx, ctx.lat); ppTone([988], 0, .22, 'sine', .13);
+}
+function ppStep(dt) {                                                   // 毎フレーム: 準備中の確認・作動中のアクセル/ブレーキ/ハンドルの指示(stepPlayerが読む)
+  PP.msgT = Math.max(0, PP.msgT - dt);
+  if (PP.state === 'off') { PP.thr = PP.brk = 0; PP.hintT = (PP.hintT || 0) - dt; if (PP.hintT <= 0) { PP.hintT = .3; PP.hintOk = state === 'play' && ppAvail() && !!ppCtx(car); } return; }      // 使えるかどうかの表示は0.3秒ごとに確認
+  const c = car, Fx = Math.sin(c.h), Fz = Math.cos(c.h), v = c.vx * Fx + c.vz * Fz;
+  const ok = state === 'play' && vehicleId === 'serena' && ppAvail() && c.health > 0 && !c.air && !c.dead;
+  if (!ok) { ppCancel('ProPILOT 解除', true); return; }
+  const ctx = ppCtx(c);
+  if (PP.state === 'search') {                                          // 準備中: 車線と前方の車を見つける(見つかるまで自分で運転)
+    if (!ctx) { PP.lostT += dt; if (PP.lostT > 1.2) ppCancel(course === 'city' ? '高架を出たので準備をやめました' : '車線をはずれたので準備をやめました'); return; }
+    PP.lostT = 0; PP.t += dt; PP.laneT = ppNearLane(ctx, ctx.lat);
+    let kmax = 0; for (let a = 0; a <= 40; a += 10) kmax = Math.max(kmax, ctx.k(a));
+    const seen = v > 25 / 3.6 && Math.abs(ctx.lat - PP.laneT) < 1.6 && Math.abs(angDiff(c.h, ctx.hh)) < .12 && v * v * kmax < PP_ALAT * 1.3;      // 急なカーブの中を速く走っているときは、白線をとらえきれず作動しない      // 車線の中をまっすぐ走っていれば白線がよく見える
+    PP.laneSeen = seen ? PP.laneSeen + dt : Math.max(0, PP.laneSeen - dt * 1.5);
+    if (PP.t > 1.0) PP.leadSeen = !!ppLead(c, ctx);
+    if (PP.t >= 2.6 && PP.laneSeen >= 1.2) {                            // 作動: このときの速さが設定速度
+      PP.state = 'on'; PP.iSt = 0; PP.cmdLP = undefined; PP.set = clamp(v, 30 / 3.6, 55); PP.u = c.p > .01 ? c.p : -c.b; PP.steer = c.steer; PP.vPrev = v; PP.aMeas = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lostT = 0;
+      ppTone([784, 1175, 1568], .11, .55, 'sine', .17); ppMsg('ProPILOT 作動', 2.2);
+    } else if (PP.t > 10) ppCancel('車線を認識できません(車線の中をまっすぐ走ってください)');
+    return;
+  }
+  // ---- 作動中
+  if (!ctx) { ppCancel(course === 'city' ? '高速道路を出ます ProPILOT 解除' : '車線をはずれました ProPILOT 解除'); return; }
+  if (keys.down || keys.space) { ppCancel('ProPILOT 解除(ブレーキ)'); return; }
+  PP.slipT = c.slip > 3.5 ? (PP.slipT || 0) + dt : 0;
+  if (PP.slipT > .25) { ppCancel('ProPILOT 解除(車体が不安定)'); return; }                   // 車体が横に流れている状態が続いたら解除
+  const lane = PP.laneT;
+  if (Math.abs(ctx.lat - lane) > 3.2 && PP.steerOvr <= 0) { PP.lostT += dt; if (PP.lostT > 1.2) { ppCancel('車線を認識できません ProPILOT 解除'); return; } } else PP.lostT = 0;
+  // --- 横: 車線の中央へ向かう追従(前方の一点を目指す)
+  if (keys.left || keys.right) { PP.steerOvr = .7; PP.iSt = 0; } else if (PP.steerOvr > 0) { PP.steerOvr -= dt; if (PP.steerOvr <= 0) { const vLat = c.vx * Math.cos(ctx.hh) - c.vz * Math.sin(ctx.hh); PP.laneT = ppNearLane(ctx, ctx.lat + vLat * .8); PP.steer = c.steer; } }      // 横に動いている勢いを見込んで、行き着く車線を選ぶ
+  {
+    const Ld0 = clamp(v * PP.ldA + PP.ldB, 12, 80), Ld = Math.max(12, Ld0 / (1 + PP.kC * ctx.k(Ld0 * .5))), P = ctx.at(Ld, PP.laneT), dx = P.x - c.x, dz = P.z - c.z;
+    const yL = dx * Math.cos(c.h) - dz * Math.sin(c.h), xF = dx * Fx + dz * Fz, kappa0 = 2 * yL / (xF * xF + yL * yL + 1e-6), kappa = kappa0 + PP.kE * (PP.laneT - ctx.lat) + PP.kH * angDiff(ctx.hh, c.h) / Ld;
+    const delta = Math.atan(kappa * WHEELBASE), aReq = v * v * Math.abs(kappa), lr = clamp(Math.min(aReq, MU_LAT * G_ACC) / (MU_LAT * G_ACC) - .2, 0, .8) / .8;
+    const sf = MAX_STEER * lerpTable(STEER_SF, Math.max(0, v) * 3.6) * (1 - UNDERSTEER * lr);                       // 横Gが大きいほど舵の効きが落ちる(アンダーステア)ぶんを見込んで、多めに切る
+    const eLat = PP.laneT - ctx.lat;                                  // 車線の中央からのずれ(左が正)。カーブで外へふくらむぶんを積分で少しずつ打ち消す
+    PP.iSt = clamp((PP.iSt || 0) + PP.ki * eLat * dt, -.15, .15);
+    const cmd = clamp(Math.sign(delta) * Math.min(1, Math.pow(Math.abs(delta) / sf, 1 / H.steerExp)) + PP.iSt, -1, 1);
+    PP.cmdLP = PP.cmdLP === undefined ? cmd : PP.cmdLP + (cmd - PP.cmdLP) * Math.min(1, dt / .15);
+    const cmdL = clamp(cmd + PP.kL * (cmd - PP.cmdLP) / .15, -1, 1);                    // 車の向きが変わるまでの遅れを見込んで、切り始め・戻し始めを早める
+    PP.steer += (cmdL - PP.steer) * Math.min(1, dt / .12);
+  }
+  // --- 縦: 設定速度・カーブ・前の車から、目標の加減速度(a_des)を決める
+  let vc = 1e9, needC = 0; const reach = Math.min(420, 30 + v * v / (2 * PP_DEC));
+  for (let a = 0; a <= reach; a += 10) { const k = ctx.k(a); if (k > 1e-4) { const vl = Math.sqrt(PP_ALAT / k); vc = Math.min(vc, Math.sqrt(vl * vl + 2 * PP_DEC * Math.max(0, a - 6))); if (v > vl) needC = Math.max(needC, (v * v - vl * vl) / (2 * Math.max(a - 6, 3))); } }   // 先のカーブの限界速度から、PP_DEC m/s²で落とせる速さ(間に合わないときは、必要なぶんだけ強く減速: needC)
+  const vt = Math.min(PP.set, vc);
+  let aDes = clamp(.5 * (vt - v), -3, 1.6);
+  if (needC > 2.4) aDes = Math.min(aDes, -Math.min(needC, 6.5));         // カーブに間に合わなさそうなときは、強めにブレーキ
+  const lead = ppLead(c, ctx); PP.lead = lead;
+  if (lead) {
+    const gap = lead.gap, want = 7 + (PP_TGAP + clamp((v - 22) / 25, 0, 1) * .6) * Math.max(v, 0), rel = v - lead.v;      // 速いほど車間を広めに(80km/hまで1.7秒、130km/h以上は2.3秒)
+    const aComf = clamp(.05 * (gap - want) + .6 * (lead.v - v), -2.5, 1.6);                                   // ふだんは穏やかに車間を合わせる
+    if (PP.leadId !== lead.id) { PP.leadId = lead.id; PP.leadV = lead.v; PP.aLead = 0; }                       // 前の車が変わったら、加速度の推定をやり直す
+    PP.aLead += (clamp((lead.v - PP.leadV) / Math.max(dt, 1e-3), -40, 8) - PP.aLead) * Math.min(1, dt / .12); PP.leadV = lead.v;   // 前の車の加減速(急ブレーキを見つける)
+    let aNeed = rel > 0 ? -(rel * rel) / (2 * Math.max(gap - 4, .8)) : 0;
+    if (PP.aLead < -1.5 && lead.v > .3) aNeed = Math.min(aNeed, -(v * v) / (2 * Math.max(gap + lead.v * lead.v / (2 * -PP.aLead) - 4, 1)));   // 前の車が止まるまで同じ強さでブレーキを踏み続けるものとして、止まれる減速を出す
+    else if (PP.aLead < -1.5) aNeed = Math.min(aNeed, -(v * v) / (2 * Math.max(gap - 4, 1)));                                   // 相手の速さに合わせるのに必要な減速(近づいたらこちらが強くなる)
+    const aF = Math.min(aComf, aNeed);
+    aDes = Math.min(aDes, aF);
+  }
+  const aRaw = (v - PP.vPrev) / Math.max(dt, 1e-3); PP.vPrev = v; PP.aMeas += (aRaw - PP.aMeas) * Math.min(1, dt / .3);
+  if (keys.up) { PP.accOvr = true; PP.thr = 1; PP.brk = 0; PP.u = c.p; return; } PP.accOvr = false;      // アクセルを踏んでいる間は運転手の操作(離すと設定速度へ戻る)
+  const err = aDes - PP.aMeas;
+  PP.u = clamp(PP.u + clamp(err * .9, -3, 3) * dt, -1, 1);
+  if (aDes < -6) PP.u = -1;                                             // 緊急: 全力で止まる
+  const u = clamp(PP.u + .12 * err, -1, 1);
+  PP.thr = Math.max(u, 0); PP.brk = Math.min(1, Math.max(-u, 0));
+  if (v < .6 && aDes <= .3) { PP.thr = PP.brk = 0; PP.u = 0; }          // 止まったら、そのまま止まっている(後ろへ動き出さない)
+}
+function ppHud() {                                                      // 水色のパネル。中身が変わったときだけ書き換える
+  const el = $('pp'); if (!el) return;
+  const c = car, v = Math.hypot(c.vx, c.vz) * 3.6;
+  let mode = 'off', body = '';
+  const wheel = '<svg viewBox="0 0 40 40" width="22" height="22" style="vertical-align:-5px;margin-right:6px"><circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="3.5"/><circle cx="20" cy="20" r="3.5" fill="currentColor"/><path d="M5.5 19 L16.5 19 M23.5 19 L34.5 19 M20 23.5 L20 35" stroke="currentColor" stroke-width="3.5" fill="none"/></svg>';
+  if (PP.state === 'search') {
+    mode = 'search'; const lane = PP.laneSeen >= 1.2, lead = PP.t > 1.6, prog = clamp(Math.min(PP.t / 2.6, PP.laneSeen / 1.2), 0, 1);
+    body = `<div class="ppt">${wheel}ProPILOT<span> 準備中</span></div><div class="ppc"><b class="${lane ? 'ok' : ''}">${lane ? '✓' : '…'} 車線</b><b class="${lead ? 'ok' : ''}">${lead ? '✓' : '…'} 前方車両${lead ? (PP.leadSeen ? 'あり' : 'なし') : ''}</b></div><div class="ppb"><i style="width:${Math.round(prog * 100)}%"></i></div><div class="pps">車線の中をまっすぐ走ってください</div>`;
+  } else if (PP.state === 'on') {
+    mode = 'on'; const ld = PP.lead, ov = PP.accOvr ? 'アクセル操作中' : PP.steerOvr > 0 ? 'ハンドル操作中(車線維持を一時停止)' : '';
+    const gy = ld ? 30 - clamp(ld.gap / (7 + PP_TGAP * Math.max(v / 3.6, 0)) / 3, 0, 1) * 22 : 0;
+    const road = `<svg viewBox="0 0 120 52" width="150" height="65"><path d="M30 52 L52 2 M90 52 L68 2" stroke="#4cd0ff" stroke-width="3" fill="none" stroke-linecap="round" ${PP.steerOvr > 0 ? 'opacity=".35"' : ''}/><rect x="52" y="38" width="16" height="12" rx="3" fill="#bff0ff"/>${ld ? `<rect x="${60 - 7 - (30 - gy) / 6}" y="${gy}" width="${14 + (30 - gy) / 3}" height="${8 + (30 - gy) / 4}" rx="2.5" fill="#4cd0ff"/>` : ''}</svg>`;
+    body = `<div class="ppt">${wheel}ProPILOT<span> 作動中</span></div>${road}<div class="pps"><b>SET ${Math.round(PP.set * 3.6)}</b> km/h　${ld ? '前方車両 ' + Math.round(ld.gap) + 'm' : '前方に車なし'}</div>${ov ? `<div class="pps warn">${ov}</div>` : ''}`;
+  } else if (PP.msgT > 0) { mode = 'msg'; body = `<div class="ppt">${wheel}ProPILOT</div><div class="pps">${PP.msg}</div>`; }
+  else if (PP.hintOk) { mode = 'hint'; body = `<div class="pps"><kbd>P</kbd> ProPILOT</div>`; }
+  const key = mode + '|' + body; if (PP.hud === key) return; PP.hud = key;
+  el.className = mode; el.style.display = mode === 'off' ? 'none' : 'block'; el.innerHTML = body;
+  $('spd').style.color = PP.state === 'on' ? '#7fdcff' : '';
+}
+
+/* =====================================================================
    自車の挙動(アーケード寄りの車両運動)
    ===================================================================== */
 function stepPlayer(dt) {
+  ppStep(dt);
   const c = car, play = state === 'play', alive = play && c.health > 0;
   const air = !!c.air;                                              // 吹き飛んでいる間は、アクセル・ブレーキ・ハンドルは効かず、地面からの力(タイヤ・ブレーキ・回生)も受けない
   const airV = air ? { vx: c.vx, vz: c.vz, h: c.h } : null;
   const hb = alive && keys.space && !air;
   nitroOn = !!(alive && keys.shift && c.nitro > .01 && !c.dead);
   // キーボードは押す/離すの2択なので、ペダルの踏み込みを滑らかにする(アクセル0.12秒・ブレーキ0.3秒で全開)
-  const upKey = alive && keys.up && !air, downKey = alive && keys.down && !air;
-  c.p += clamp((upKey ? 1 : 0) - c.p, -dt / H.thrRelease, dt / (H.thrRamp * M.thr / .12));
-  c.b += clamp((downKey ? 1 : 0) - c.b, -dt / H.brakeRelease, dt / H.brakeRamp);
+  const pil = PP.state === 'on' && alive && !air;                     // ProPILOT作動中: アクセル・ブレーキ・ハンドルはシステムが出す(運転手が踏んだ/切ったときは上書き)
+  const upKey = alive && !air && (pil ? PP.thr > .001 : keys.up), downKey = alive && !air && !pil && keys.down;
+  c.p += clamp((pil ? PP.thr : upKey ? 1 : 0) - c.p, -dt / H.thrRelease, dt / (H.thrRamp * M.thr / .12));
+  c.b += clamp((pil ? PP.brk : downKey ? 1 : 0) - c.b, -dt / H.brakeRelease, dt / H.brakeRamp);
   c.coast = upKey ? 0 : Math.min(1, c.coast + dt / H.coastRamp);       // 離した瞬間から0.15秒で回生が立ち上がる
   const thrEff = H.thrLinear ? c.p : Math.pow(c.p, M.curve) * (c.p < .2 ? .8 : 1);                     // 低開度だけ少し鈍らせる(急な飛び出し防止)
   c.thr = c.p; c.thrE = thrEff;
@@ -1727,8 +1901,9 @@ function stepPlayer(dt) {
   let Fx = Math.sin(c.h), Fz = Math.cos(c.h), vf = c.vx * Fx + c.vz * Fz;
   const av = Math.abs(vf);
   // --- ハンドル → ヨー(旋回)。速度が上がるほど切れ角は小さく
-  const st = alive && !air ? (keys.left ? 1 : 0) - (keys.right ? 1 : 0) : 0;
-  const rate = (st === 0 ? 6 : 3.6) * M.steerRate * H.steerRate / (1 + av / H.steerDecay);       // 速いほどキー入力に対するハンドルの動きをゆっくりに
+  const pilSteer = pil && PP.steerOvr <= 0;
+  const st = alive && !air ? (pilSteer ? PP.steer : (keys.left ? 1 : 0) - (keys.right ? 1 : 0)) : 0;
+  const rate = (st === 0 && !pilSteer ? 6 : 3.6) * M.steerRate * H.steerRate / (1 + av / H.steerDecay);       // 速いほどキー入力に対するハンドルの動きをゆっくりに
   c.steer += clamp(st - c.steer, -rate * dt, rate * dt);
   // 舵角 → 自転車モデルの旋回(ヨーレート)。限界に近づくほど舵が効かなくなる(アンダーステア)
   const latRatio = clamp(Math.min(Math.abs(c.aLat), MU_LAT * G_ACC) / (MU_LAT * G_ACC) - .2, 0, .8) / .8;   // 横Gが限界の2割までは舵の補正なし(駐車場の速度で最小回転半径どおりに回れる)
@@ -2026,7 +2201,7 @@ function drawG(dt) {                                    // Gの表示値を更�
 let hudTick = 0;
 function updateHud() {
   const kmh = Math.hypot(car.vx, car.vz) * 3.6;
-  $('spd').textContent = Math.round(kmh);
+  $('spd').textContent = Math.round(kmh); ppHud();
   $('gear').textContent = (Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5 ? 'R' : VEH.powertrain.type === 'ice' ? String(car.gear || 1) : VEH.powertrain.coastB ? decelSel : 'D') + '  ' + M.name + (ePedal && VEH.powertrain.type !== 'ice' ? '  e-Pedal' : '');
   $('rpm').style.width = car.out * 100 + '%';
   { const ht = hyInfoText(); if ($('hyInfo').textContent !== ht) $('hyInfo').textContent = ht; }
@@ -2247,6 +2422,7 @@ function cityDeckWalls(c) {                                        // 高架の�
   if (vo > 0) { c.vx -= nx * sg * vo * 1.25; c.vz -= nz * sg * vo * 1.25; if (vo > 3 && railCool <= 0) { railCool = .35; shake = Math.min(1.2, shake + vo / 25); sfxCrash(clamp(vo / 15, 0, 1)); } }
 }
 function cityRampWalls(c) {                                        // ランプの両側の壁(高架や地上につながる端は壁なし)。高さのちがう地上の車には効かない
+  if (cityLevel(c).zone !== 'ramp') return;                          // ランプの上にいる車だけ(高架を走る車が、合流するランプの壁に引き寄せられないように)
   for (const rp of RAMPS) {
     const r = pathProject(rp, c.x, c.z), y = rp.y(r.s); if (y < .9 || Math.abs((c.y || 0) - y) > .3) continue;      // 壁がある高さ(地上から1m近く浮いた所)で、その路面に乗っている車だけ。下の地上の車は引っぱらない
     const s0 = rp.kind === 'off' ? 45 : 20, s1 = rp.kind === 'off' ? rp.len - 25 : rp.len - 45; if (r.s < s0 || r.s > s1) continue;
@@ -2743,6 +2919,7 @@ function cityRecover(sp) {                              // 街: いちばん近�
   cityPlaceCar({ x: best.x, z: best.z, h: best.h }); car.vx = Math.sin(best.h) * sp; car.vz = Math.cos(best.h) * sp; car.prevVf = sp;
 }
 function cityPlaceCar(w) {
+  ppReset();
   const c = car; c.x = w.x; c.z = w.z; c.h = w.h; c.y = 0; c.vx = c.vz = 0; c.yaw = 0; c.steer = 0; c.s = 0; c.d = 0; c.roll = 0; c.pitch = 0; c.pitchV = 0; c.air = false; c.hop = 0; c.tumP = c.tumR = 0;
   camH = w.h; c.prevVf = 0; c.outside = undefined; c.grass = false; city.sl.clear(); city.parkT = 0; city.mergeT = 0; city.onAccel = false;
 }
@@ -2854,7 +3031,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
+window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
 </script>
 </body>
 </html>

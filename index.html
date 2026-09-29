@@ -77,6 +77,11 @@
   #pp .ppb{height:5px;border-radius:3px;background:rgba(0,0,0,.4);margin:5px 0 2px;overflow:hidden}
   #pp .ppb i{display:block;height:100%;background:#4cd0ff}
   #pp kbd{background:#4cd0ff;color:#04283c;border-radius:4px;padding:0 6px;font-size:11px;font-weight:800;margin-right:4px}
+  #replayBtn{position:fixed;right:24px;bottom:230px;width:46px;height:46px;border-radius:50%;background:rgba(0,0,0,.5);border:2px solid rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .25s;z-index:5}
+  #replayBtn.show{opacity:1;pointer-events:auto}
+  #replayBtn:active{transform:scale(.9)}
+  #replayHud{position:fixed;left:50%;top:14px;transform:translateX(-50%);font-size:15px;font-weight:700;background:rgba(0,0,0,.55);border-radius:8px;padding:5px 16px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:5}
+  #replayHud.show{opacity:1}
 </style>
 </head>
 <body>
@@ -97,6 +102,8 @@
   <div id="pp"></div>
   <div id="pop"></div>
 </div>
+<div id="replayBtn" title="クラッシュ/急ブレーキのリプレイ">📷</div>
+<div id="replayHud">🎬 リプレイ再生中　<span style="opacity:.75">[Esc]で戻る</span></div>
 
 <div class="ov on" id="ovStart">
   <div>
@@ -112,6 +119,7 @@
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
       <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
       <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)</div>
+      <div style="opacity:.85">衝突・急ブレーキをすると右下に📷が出ます。押すとその場面をリプレイ(<kbd>Esc</kbd>で戻る)</div>
     </div>
     <div class="go">Enter かクリックでスタート</div>
   </div>
@@ -882,10 +890,12 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyN') { todEnabled = !todEnabled; updateSky(true); if (typeof refreshEnv === 'function' && envReady) refreshEnv(); popup(todEnabled ? '現実の時間と連動: ON' : '現実の時間と連動: OFF(常に昼)'); }
   if (e.code === 'Enter' || (e.code === 'Space' && state === 'ready')) { if (state === 'ready') startGame(); else if (state === 'over') restart(); }
   if (e.code === 'KeyR') { if (state === 'over') restart(); else if (state === 'play') recover(); }
+  if (e.code === 'Escape' && replay.active) replayEnd();
 });
 addEventListener('keyup', e => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = 0; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = 0; });
-addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-course],[data-mode],[data-veh]')) return; if (state === 'ready') startGame(); else if (state === 'over' && overT > 1.2) restart(); });
+addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-course],[data-mode],[data-veh],#replayBtn')) return; if (state === 'ready') startGame(); else if (state === 'over' && overT > 1.2) restart(); });
+$('replayBtn').addEventListener('pointerdown', e => { e.stopPropagation(); replayStart(); });
 
 /* =====================================================================
    サウンド(WebAudioでその場合成)
@@ -1114,6 +1124,7 @@ function crashFx(x, y, z, dx, dz, power, player) {   // (x,y,z): 衝突位置  (
   if (player) { if (now - fxTP < 200) return; fxTP = now; wear += power * .8; }        // 傷みは自車だけ(表示なし)
   else { if (now - fxTO < 120) return; fxTO = now; }
   if (power < 8) return;
+  if (player && state === 'play') replayTrigger();
   const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
   if (player && carMesh && (!fireHot || power >= 10)) { carMesh.updateWorldMatrix(true, false); fireHot = carMesh.worldToLocal(new THREE.Vector3(x, y + .3, z)); }   // 出火する場所はいちばん強くぶつけたところ
   const vx = dx * power * .5, vz = dz * power * .5;
@@ -1130,6 +1141,65 @@ function updateFire(dt) {                            // 出火中の炎と煙(�
   smokeAcc += (6 + 6 * f) * dt; fireAcc += (16 + 14 * f) * dt;
   while (smokeAcc >= 1) { smokeAcc--; emit(p.x + rnd(-.2, .2), p.y + .2, p.z + rnd(-.2, .2), car.vx * .85 + rnd(-.5, .5), rnd(1.2, 2.4), car.vz * .85 + rnd(-.5, .5), rnd(1.1, 1.9), rnd(.5, .8), 2.2, 0x303030, false, -.5); }
   while (fireAcc >= 1) { fireAcc--; emit(p.x + rnd(-.25, .25), p.y + rnd(0, .25), p.z + rnd(-.25, .25), car.vx * .9 + rnd(-.6, .6), rnd(1.5, 3.2), car.vz * .9 + rnd(-.6, .6), rnd(.3, .6), rnd(.5, .9), .5, Math.random() < .5 ? 0xff5a14 : 0xffb030, true, -3); }
+}
+
+/* =====================================================================
+   リプレイ(衝突・急ブレーキのハイライトを自動録画)
+   ・常に直近数秒をリングバッファに録画。衝突/急ブレーキを検知したら少し追加録画してクリップ確定
+   ・確定すると右下にボタン表示(触らなければ数秒で消える・次のイベントで上書き。溜め込まない)
+   ・押すと一時停止してリプレイ再生(自車の動きだけ。周りの車は再生中の見た目上は静止)
+   ===================================================================== */
+const REPLAY_BUF_SEC = 6, REPLAY_POST_SEC = 1.3, REPLAY_COOLDOWN = 4, REPLAY_BTN_SHOW = 8;
+let replayBuf = [], replayClip = null, replayPendingT = 0, replayCoolT = 0, replayBtnT = 0;
+const replay = { active: false, i: 0, saved: null };
+function replaySnapshot(dt) {
+  replayBuf.push({ dt, x: car.x, y: car.y, z: car.z, h: car.h, pitch: car.pitch, roll: car.roll, tumP: car.tumP || 0, tumR: car.tumR || 0, hop: car.hop || 0, steer: car.steer, wheelRot: car.wheelRot, vx: car.vx, vz: car.vz, b: car.b, nitro: nitroOn });
+  let total = 0; for (const s of replayBuf) total += s.dt;
+  while (total > REPLAY_BUF_SEC + REPLAY_POST_SEC && replayBuf.length > 1) total -= replayBuf.shift().dt;
+  if (replayCoolT > 0) replayCoolT -= dt;
+  if (replayPendingT > 0 && (replayPendingT -= dt) <= 0) replayFinalize();
+  if (replayBtnT > 0 && (replayBtnT -= dt) <= 0) { $('replayBtn').classList.remove('show'); replayClip = null; }
+}
+function replayTrigger() {                          // 衝突/急ブレーキを検知した時に呼ぶ(連鎖するイベントは録画を延長するだけ)
+  if (replay.active || replayCoolT > 0) return;
+  replayPendingT = REPLAY_POST_SEC;
+}
+function replayFinalize() {
+  replayClip = replayBuf.slice(); replayCoolT = REPLAY_COOLDOWN; replayBtnT = REPLAY_BTN_SHOW;
+  $('replayBtn').classList.add('show');
+}
+function replayStart() {
+  if (!replayClip || replay.active) return;
+  replay.active = true; replay.i = 0;
+  camH = replayClip[0].h;   // カメラの追従角度を再生開始位置の向きに合わせる(合わせないと、押した瞬間の向きから毎回違う勢いで振られて「避けた」ように見える)
+  replay.saved = { x: car.x, y: car.y, z: car.z, h: car.h, pitch: car.pitch, roll: car.roll, tumP: car.tumP, tumR: car.tumR, hop: car.hop, steer: car.steer, wheelRot: car.wheelRot, vx: car.vx, vz: car.vz, b: car.b };
+  $('replayBtn').classList.remove('show'); $('replayHud').classList.add('show');
+  $('pp').style.display = 'none'; PP.hud = null;   // ProPILOTパネルは録画してないので、再生中は隠す(生の状態のままだと実際と違う急ブレーキ表示になる)。終了後は次のppHud()で自動復帰
+}
+function replayStep(dt) {
+  const clip = replayClip, f = clip[Math.min(replay.i, clip.length - 1)];
+  Object.assign(car, { x: f.x, y: f.y, z: f.z, h: f.h, pitch: f.pitch, roll: f.roll, tumP: f.tumP, tumR: f.tumR, hop: f.hop, steer: f.steer, wheelRot: f.wheelRot, vx: f.vx, vz: f.vz, b: f.b });
+  carMesh.position.set(f.x, f.y + f.hop, f.z); carMesh.rotation.set(f.pitch + f.tumP, f.h, f.roll + f.tumR);
+  for (const w of PLAYER.wheels) { w.m.rotation.x = f.wheelRot; if (w.front) w.piv.rotation.y = f.steer * .4; }
+  PLAYER.steerWheel.rotation.z = -f.steer * 1.3;
+  const braking = f.b > .05;
+  PLAYER.tailMat.color.setHex(braking ? 0xff2a2a : 0x8a1010);
+  PLAYER.tailGlows.forEach(g => { g.material.opacity = braking ? 1 : .45; g.scale.setScalar(braking ? 2.2 : 1.3); });
+  nitroOn = !!f.nitro;
+  PLAYER.flames.forEach(fl => { fl.visible = nitroOn; if (nitroOn) fl.scale.set(1, 1, .7 + Math.random() * .7); });
+  replay.i++;
+  if (replay.i >= clip.length) replayEnd();
+}
+function replayEnd() {
+  if (!replay.active) return;
+  Object.assign(car, replay.saved);
+  replay.active = false; replay.saved = null;
+  $('replayHud').classList.remove('show');
+}
+function replayReset() {                            // リスタート・コース切替時: 古いクリップ(別の場所/コースの座標)を持ち越さない
+  if (replay.active) replayEnd();
+  replayBuf = []; replayClip = null; replayPendingT = replayCoolT = replayBtnT = 0;
+  $('replayBtn').classList.remove('show');
 }
 
 /* =====================================================================
@@ -1394,7 +1464,7 @@ function updateLap(dt) {
   lapIdx = idx;
 }
 function restart() {
-  resetDestruction(); resetWear();
+  resetDestruction(); resetWear(); replayReset();
   score = 0; dist = 0; combo = 0; comboT = 0; maxKmh = 0; overT = 0; car.health = 100; car.nitro = 1; car.batt = battInit(); car.gen = 0; resetHy(); car.charging = false; car.assist = false; car.dead = false; car.deadT = 0;
   placeCar(courseStartS(), 1.8, 0); initTraffic(); resetLaps();
   $('ovOver').classList.remove('on');
@@ -1406,7 +1476,7 @@ function refreshCourseUI() {
   $('courseDesc').textContent = COURSE_DESC[course];
 }
 function setCourse(name) {                              // コース切り替え: 道路・木・交通・自車位置を作り直して待機画面へ
-  damagedChunks.clear(); resetDestruction(); resetWear();
+  damagedChunks.clear(); resetDestruction(); resetWear(); replayReset();
   serenaTrafficN = 0; for (const t of traffic) t._useS = false;   // セレナ台数の上限カウントを、コース切り替えのたびに数え直す(ずれを防ぐ)
   course = name; resetRoad(); setLanes();
   for (const [, ch] of chunks) { scene.remove(ch.grp); ch.geos.forEach(g => g.dispose()); ch.inst.forEach(m => m.dispose()); }
@@ -2029,6 +2099,7 @@ function stepPlayer(dt) {
   wallBox(c);                                                        // 見えない壁(サーキットと街の外周)
   if (c.prevVf > .3 && vf < .05 && c.b > .3) c.pitchV = (c.pitchV || 0) - H.stopKick * clamp(-c.accel / G_ACC, 0, 2);   // 止まる瞬間にブレーキの力が抜けて、前のめりの車体が起き上がる(カックン)
   c.accel = c.accelCmd; c.prevVf = vf;
+  if (state === 'play' && c.accel < -6.5 && Math.hypot(c.vx, c.vz) > 6) replayTrigger();
   c.wheelRot += vf * dt / .34;
 
   // --- 道路との関係
@@ -2227,7 +2298,7 @@ function drawG(dt) {                                    // Gの表示値を更�
 let hudTick = 0;
 function updateHud(dt) {
   const kmh = Math.hypot(car.vx, car.vz) * 3.6;
-  $('spd').textContent = Math.round(kmh); ppHud(dt);
+  $('spd').textContent = Math.round(kmh); if (!replay.active) ppHud(dt);
   $('gear').textContent = (Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5 ? 'R' : VEH.powertrain.type === 'ice' ? String(car.gear || 1) : VEH.powertrain.coastB ? decelSel : 'D') + '  ' + M.name + (ePedal && VEH.powertrain.type !== 'ice' ? '  e-Pedal' : '');
   $('rpm').style.width = car.out * 100 + '%';
   { const ht = hyInfoText(); if ($('hyInfo').textContent !== ht) $('hyInfo').textContent = ht; }
@@ -3061,10 +3132,17 @@ function frame(now) {
   const fStart = performance.now();
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (dt > 0) {
-    drawG(dt); if (course === 'straight') updateDrag(dt);
-    updateRace(dt); stepPlayer(dt); stepTraffic(dt); updateLap(dt); updateRpm(dt); updateChunks(car.s);
-    updateParts(dt); updateDebris(dt); updateFire(dt); updateCamera(dt); updateFx(dt); updateHud(dt); drawMini(dt);
-    updateAudio(car.thr, Math.hypot(car.vx, car.vz) * 3.6, car.slip, nitroOn, scraping);
+    if (replay.active) {
+      replayStep(dt);
+      updateAudio(0, 0, 0, false, false);
+    } else {
+      drawG(dt); if (course === 'straight') updateDrag(dt);
+      updateRace(dt); stepPlayer(dt); stepTraffic(dt); updateLap(dt); updateRpm(dt); updateChunks(car.s);
+      updateParts(dt); updateDebris(dt); updateFire(dt);
+      if (state === 'play') replaySnapshot(dt);
+      updateAudio(car.thr, Math.hypot(car.vx, car.vz) * 3.6, car.slip, nitroOn, scraping);
+    }
+    updateCamera(dt); updateFx(dt); updateHud(dt); drawMini(dt);
   }
   renderer.render(scene, camera);
   const total = performance.now() - fStart;
@@ -3078,7 +3156,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; } };
+window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; } };
 </script>
 </body>
 </html>

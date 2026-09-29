@@ -1833,7 +1833,7 @@ function damage(v) { if (DAMAGE_ENABLED) car.health = Math.max(0, car.health - v
    ===================================================================== */
 const PP = { state: 'off', t: 0, set: 0, laneT: 0, thr: 0, brk: 0, steer: 0, u: 0, vPrev: 0, aMeas: 0, lead: null, laneSeen: 0, leadSeen: false, steerOvr: 0, accOvr: false, lostT: 0, msg: '', msgT: 0, hud: '', ldA: 1.3, ldB: 8, ki: 0, kE: 0, kH: 0, kL: 0, kC: 100, cmdLP: undefined, leadId: null, leadV: 0, aLead: 0, hardBrakeT: 0, keyT: 0, laneChT: 0, lastKeyDir: 0 };
 const PP_LC_TAP = .3, PP_LC_GAP = 14;                                   // 車線変更: これ未満で離せば合図とみなすタップの長さ(秒)・変更先で必要な前後の車間(m)
-const PP_LEN = 4.7, PP_GAP_MIN = 8, PP_ALAT = 4.0, PP_DEC = 2.6;                     // 自車の長さ・保つ車間距離の下限(m)・カーブで許す横加速度(m/s²)・カーブ減速(m/s²)                     // 自車の長さ・車間時間(秒)・カーブで許す横加速度(m/s²)
+const PP_LEN = 4.7, PP_GAP_MIN = 8, PP_ALAT = 4.0, PP_DEC = 2.6, PP_ACC = 2.7;        // 自車の長さ・保つ車間距離の下限(m)・カーブで許す横加速度(m/s²)・カーブ減速(m/s²)・巡航/追従での加速の上限(m/s²)
 const ppAvail = () => vehicleId === 'serena' && (course === 'public' || course === 'city');
 function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色のシステム音(サイン波の柔らかいチャイム)
   if (!ac) return; const t0 = ac.currentTime;
@@ -1970,7 +1970,7 @@ function ppStep(dt) {                                                   // 毎�
   PP.slipT = c.slip > 3.5 ? (PP.slipT || 0) + dt : 0;
   if (PP.slipT > .25) { ppCancel('ProPILOT 解除(車体が不安定)'); return; }                   // 車体が横に流れている状態が続いたら解除
   const lane = PP.laneT;
-  if (Math.abs(ctx.lat - lane) > 3.2 && PP.steerOvr <= 0) { PP.lostT += dt; if (PP.lostT > 1.2) { ppCancel('車線を認識できません ProPILOT 解除'); return; } } else PP.lostT = 0;
+  if (Math.abs(ctx.lat - lane) > 3.2 && PP.steerOvr <= 0 && PP.laneChT <= 0) { PP.lostT += dt; if (PP.lostT > 1.2) { ppCancel('車線を認識できません ProPILOT 解除'); return; } } else PP.lostT = 0;   // 車線変更支援で移動中は、目標から離れていて当然なので見失い判定をしない
   // --- 横: 車線の中央へ向かう追従(前方の一点を目指す)
   if (keys.left || keys.right) {                                       // 短くタップ: 自動で隣の車線へ(車線変更支援)。長押し: 今まで通り手動で運転を引き継ぐ
     PP.keyT = (PP.keyT || 0) + dt; PP.lastKeyDir = keys.left ? 1 : -1;
@@ -2002,7 +2002,7 @@ function ppStep(dt) {                                                   // 毎�
     if (v > vl) needC = Math.max(needC, (v * v - vl * vl) / (2 * Math.max(a - 9, 3)));                          // 先のカーブの限界速度に、9m手前には収まっているという厳しめの余裕で合わせる。間に合わないぶんだけ強く減速(needC)。1つの式で、軽い減速からフルブレーキまで連続して強くなる(急に切り替わらない)
   }
   const vt = Math.min(ctx.kind === 'ramp' ? Math.max(PP.set, ctx.merge) : PP.set, vc);   // 合流支援: ランプの上では設定速度より、合流先の交通の速さを優先して加速
-  let aDes = clamp(.5 * (vt - v), -3, 1.6);
+  let aDes = clamp(.5 * (vt - v), -3, PP_ACC);
   if (needC > 1.2) aDes = Math.min(aDes, -Math.min(needC, 9));           // カーブに間に合わなさそうなときは、必要なぶんだけ強く(最大でフルブレーキ)
   const lead = ppLead(c, ctx); PP.lead = lead;
   if (ctx.kind !== 'ramp') { const av2 = ppLaneAvail(ctx); PP.canLeft = av2.left; PP.canRight = av2.right; } else PP.canLeft = PP.canRight = false;
@@ -2015,7 +2015,7 @@ function ppStep(dt) {                                                   // 毎�
     PP.aLead += (clamp((lead.v - PP.leadV) / Math.max(dt, 1e-3), -40, 8) - PP.aLead) * Math.min(1, dt / .12); PP.leadV = lead.v;   // 前の車の加減速(急ブレーキを見つける)
     // 車間が目標より広ければ、前の車の速さより速く出してでも詰める(PP_DECで気持ちよく減速し、車間が目標になったところで前の車と同じ速さになる)。狭ければ、その逆でゆっくり開く
     const dGap = gap - want, vFollow = dGap >= 0 ? Math.sqrt(Math.max(0, lead.v * lead.v + 2 * PP_DEC * dGap)) : Math.max(0, lead.v - Math.sqrt(2 * PP_DEC * -dGap));
-    aDes = Math.min(aDes, clamp(.5 * (vFollow - v), -3, 1.6));
+    aDes = Math.min(aDes, clamp(.5 * (vFollow - v), -3, PP_ACC));
     const rel = v - lead.v;
     let aNeed = rel > 0 ? -(rel * rel) / (2 * Math.max(gap - 4, .8)) : 0;                                     // 安全弁: 今の相対速度のまま詰まったら危ないので、常に効かせておく(前の車が止まりきった後もこれは切れない)
     if (PP.aLead < -1.5 && lead.v > .3) aNeed = Math.min(aNeed, -(v * v) / (2 * Math.max(gap + lead.v * lead.v / (2 * -PP.aLead) - 4, 1)));   // 前の車が急ブレーキ中: 止まるまで同じ強さで踏み続けるものとして、止まれる減速を出す

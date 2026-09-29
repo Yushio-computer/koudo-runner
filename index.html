@@ -2023,6 +2023,12 @@ function ppStep(dt) {                                                   // 毎�
     else if (PP.aLead < -1.5) aNeed = Math.min(aNeed, -(v * v) / (2 * Math.max(gap - 4, 1)));
     if (aNeed < -.3) aDes = Math.min(aDes, aNeed);                                                            // ごくわずかに前の車より速いだけ(ガードが常時発動して全く近づけなくなる)は無視する
   }
+  PP.logT = (PP.logT || 0) - dt;
+  if (PP.logT <= 0) {                                                    // ProPILOTが今何を考えて加減速を決めてるか、0.5秒おきにコンソールへ
+    PP.logT = .5;
+    const leadTxt = lead ? ` | 前車 ${Math.round(lead.v * 3.6)}km/h 車間${lead.gap.toFixed(0)}m(目標${Math.max(PP_GAP_MIN, lead.v * 1.0).toFixed(0)}m)` : '';
+    console.log(`[ProPILOT] v=${Math.round(v * 3.6)}km/h set=${Math.round(PP.set * 3.6)}km/h カーブ限界=${Math.round(Math.min(vc, 999) * 3.6)}km/h needC=${needC.toFixed(2)} → aDes=${aDes.toFixed(2)}m/s²${leadTxt}`);
+  }
   const aRaw = (v - PP.vPrev) / Math.max(dt, 1e-3); PP.vPrev = v; PP.aMeas += (aRaw - PP.aMeas) * Math.min(1, dt / .3);
   if (keys.up) { PP.accOvr = true; PP.thr = 1; PP.brk = 0; PP.u = c.p; return; } PP.accOvr = false;      // アクセルを踏んでいる間は運転手の操作(離すと設定速度へ戻る)
   const err = aDes - PP.aMeas;
@@ -3223,14 +3229,7 @@ updateChunks(60, 99);
 document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); setDriveMode(b.dataset.mode, false); }));
 document.querySelectorAll('[data-course]').forEach(b => b.addEventListener('click', e => { e.stopPropagation(); if (state === 'ready' || state === 'over') setCourse(b.dataset.course); }));
 let last = performance.now();
-// ---- 重いフレームを見つけるための一時的な計測(原因が分かったら、ここからdiagEl関連もまとめて消す) ----
-let diagT0 = 0, diagWorst = 0, diagGcSusp = 0, diagHeapMax = 0, diagWorstGap = 0, diagGapOver = 0, diagN = 0;   // コマ落ちの見張り番(あえて残してある)。3秒おきにコンソールへ[perf2]の行を出すだけで、負荷はごく軽い。消したくなったらここから下のdiag関連ごと削除
 function frame(now) {
-  const rawGap = last ? now - last : 0;
-  if (rawGap > diagWorstGap) diagWorstGap = rawGap;
-  if (rawGap > 33) diagGapOver++;
-  const heapBefore = performance.memory ? performance.memory.usedJSHeapSize : 0;
-  const fStart = performance.now();
   const dt = Math.min(.05, (now - last) / 1000); last = now;
   if (dt > 0) {
     if (replay.active) {
@@ -3246,14 +3245,6 @@ function frame(now) {
     updateCamera(dt); updateFx(dt); updateHud(dt); drawMini(dt);
   }
   renderer.render(scene, camera);
-  const total = performance.now() - fStart;
-  const heapAfter = performance.memory ? performance.memory.usedJSHeapSize : 0;
-  diagN++; diagHeapMax = Math.max(diagHeapMax, heapBefore); if (diagHeapMax - heapAfter > 3 * 1048576) diagGcSusp++;
-  if (total > diagWorst) diagWorst = total;
-  if (now - diagT0 > 3000) {
-    console.log(`[perf2] ${diagN}フレーム中、コマの間隔33ms超え${diagGapOver}回(最悪${diagWorstGap.toFixed(0)}ms)。GC疑い${diagGcSusp}回。自分のコード最悪${diagWorst.toFixed(1)}ms`);
-    diagT0 = now; diagN = diagGcSusp = diagWorstGap = diagGapOver = 0; diagWorst = 0; diagHeapMax = 0;
-  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

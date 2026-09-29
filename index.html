@@ -121,6 +121,7 @@
       <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)　<kbd>F</kbd>天候切替(晴れ/雨/霧)</div>
       <div style="opacity:.85">衝突・急ブレーキをすると右下に📷が出ます。押すとその場面をリプレイ(<kbd>Esc</kbd>で戻る)</div>
       <div style="opacity:.85">ProPILOT作動中、前の車に詰まって「追い越しますか?」と出たら<kbd>A</kbd>を軽くタップで追越車線へ(車線変更支援)。戻るときは<kbd>D</kbd>。長押しすると今まで通り手動運転</div>
+      <div style="opacity:.85">ProPILOT作動中に事故(巻き込みなど)が起きると、警告音とハザードを出しながら自動で緊急停車します</div>
     </div>
     <div class="go">Enter かクリックでスタート</div>
   </div>
@@ -1134,6 +1135,7 @@ function crashFx(x, y, z, dx, dz, power, player) {   // (x,y,z): 衝突位置  (
   else { if (now - fxTO < 120) return; fxTO = now; }
   if (power < 8) return;
   if (player && state === 'play') replayTrigger();
+  if (player && state === 'play' && PP.state === 'on' && !PP.emergency) ppEmergencyStop();   // ProPILOT作動中に事故(巻き込みなど) → 緊急停車
   const L = Math.hypot(dx, dz) || 1; dx /= L; dz /= L;
   if (player && carMesh && (!fireHot || power >= 10)) { carMesh.updateWorldMatrix(true, false); fireHot = carMesh.worldToLocal(new THREE.Vector3(x, y + .3, z)); }   // 出火する場所はいちばん強くぶつけたところ
   const vx = dx * power * .5, vz = dz * power * .5;
@@ -1840,7 +1842,7 @@ function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色
   freqs.forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * gap; o.type = type; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g).connect(master); o.start(t); o.stop(t + dur + .03); });
 }
 const ppMsg = (text, sec = 2.6) => { PP.msg = text; PP.msgT = sec; };
-function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.hudT = 0; PP.msgT = 0; PP.keyT = 0; PP.laneChT = 0; PP.slowT = 0; PP.canLeft = PP.canRight = false; }
+function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.hudT = 0; PP.msgT = 0; PP.keyT = 0; PP.laneChT = 0; PP.slowT = 0; PP.canLeft = PP.canRight = false; PP.emergency = false; PP.hazT = 0; PP.stopT = 0; }
 function ppLaneClear(ctx, lane) {                                      // 車線変更支援: 変更先の車線の前後(PP_LC_GAP以内)に車がいないか
   const L = ctx.kind === 'deck' ? DECK.len : 1e6;
   for (const t of traffic) {
@@ -1943,12 +1945,25 @@ function ppToggle() {
   if (!ctx) { ppMsg(course === 'city' ? 'ProPILOTは 高架の高速道路(入るランプの上も含む)で使えます' : 'ProPILOTは 車線の中を走っているときに使えます'); ppTone([330, 247], .12, .22, 'triangle', .14); return; }
   PP.state = 'search'; PP.t = 0; PP.laneSeen = 0; PP.leadSeen = false; PP.lostT = 0; PP.laneT = ppNearLane(ctx, ctx.lat); ppTone([988], 0, .22, 'sine', .13);
 }
+function ppEmergencyStop() {                                            // ProPILOT作動中の事故(巻き込みなど): 最大ブレーキ+ハザードで緊急停車
+  PP.emergency = true; PP.hazT = 0; PP.stopT = 0; PP.emergBeepT = 0;
+  ppMsg('衝突を検知 緊急停車します', 3);
+}
+function ppEmergencyStep(c, dt) {
+  const v = Math.hypot(c.vx, c.vz);
+  PP.thr = 0; PP.brk = 1; PP.u = -1; PP.accOvr = false;                  // 最大ブレーキで停止まで固定
+  PP.hazT += dt;
+  PP.emergBeepT -= dt; if (PP.emergBeepT <= 0) { PP.emergBeepT = .45; ppTone([1600], 0, .1, 'square', .2); }   // ピピピピ…という警告音
+  if (v < .5) { c.vx = 0; c.vz = 0; PP.stopT += dt; if (PP.stopT > 3) ppCancel('緊急停車しました 手動で運転を再開してください'); }   // 低速域でわずかに前へ這う現象があるので、止まったら速度を直接ゼロにして確実に停止させる
+  else PP.stopT = 0;
+}
 function ppStep(dt) {                                                   // 毎フレーム: 準備中の確認・作動中のアクセル/ブレーキ/ハンドルの指示(stepPlayerが読む)
   PP.msgT = Math.max(0, PP.msgT - dt);
   if (PP.state === 'off') { PP.thr = PP.brk = 0; PP.hintT = (PP.hintT || 0) - dt; if (PP.hintT <= 0) { PP.hintT = .3; PP.hintOk = state === 'play' && ppAvail() && !!ppCtx(car); } return; }      // 使えるかどうかの表示は0.3秒ごとに確認
   const c = car, Fx = Math.sin(c.h), Fz = Math.cos(c.h), v = c.vx * Fx + c.vz * Fz;
   const ok = state === 'play' && vehicleId === 'serena' && ppAvail() && c.health > 0 && !c.air && !c.dead;
   if (!ok) { ppCancel('ProPILOT 解除', true); return; }
+  if (PP.emergency) { ppEmergencyStep(c, dt); return; }                  // 緊急停車中: 車線がどうなっていても、これ以外の判定はしない
   const ctx = ppCtx(c);
   if (PP.state === 'search') {                                          // 準備中: 車線と前方の車を見つける(見つかるまで自分で運転)
     if (!ctx) { PP.lostT += dt; if (PP.lostT > 1.2) ppCancel(course === 'city' ? '高架を出たので準備をやめました' : '車線をはずれたので準備をやめました'); return; }
@@ -2049,6 +2064,9 @@ function ppHud(dt) {                                                    // 水�
   if (PP.state === 'search') {
     mode = 'search'; const lane = PP.laneSeen >= 1.2, lead = PP.t > 1.6, prog = clamp(Math.min(PP.t / 2.6, PP.laneSeen / 1.2), 0, 1);
     body = `<div class="ppt">${wheel}ProPILOT<span> 準備中</span></div><div class="ppc"><b class="${lane ? 'ok' : ''}">${lane ? '✓' : '…'} 車線</b><b class="${lead ? 'ok' : ''}">${lead ? '✓' : '…'} 前方車両${lead ? (PP.leadSeen ? 'あり' : 'なし') : ''}</b></div><div class="ppb"><i style="width:${Math.round(prog * 100)}%"></i></div><div class="pps">車線の中をまっすぐ走ってください</div>`;
+  } else if (PP.state === 'on' && PP.emergency) {
+    mode = 'on brake';
+    body = `<div class="ppt">${wheel}ProPILOT<span> 緊急停車中</span></div><div class="ppa">⚠ 衝突を検知 停止します</div>`;
   } else if (PP.state === 'on') {
     const braking = PP.hardBrakeT > 0;
     mode = braking ? 'on brake' : 'on'; const ld = PP.lead, ov = PP.accOvr ? 'アクセル操作中' : PP.steerOvr > 0 ? 'ハンドル操作中(車線維持を一時停止)' : '';
@@ -2253,8 +2271,9 @@ function stepPlayer(dt) {
   for (const w of PLAYER.wheels) { w.m.rotation.x = c.wheelRot; if (w.front) w.piv.rotation.y = c.steer * .4; }
   PLAYER.steerWheel.rotation.z = -c.steer * 1.3;
   const braking = c.b > .05 && vf > .4;
-  PLAYER.tailMat.color.setHex(braking ? 0xff2a2a : 0x8a1010);
-  PLAYER.tailGlows.forEach(g => { g.material.opacity = braking ? 1 : .45; g.scale.setScalar(braking ? 2.2 : 1.3); });
+  const tailOn = PP.emergency ? Math.floor(PP.hazT / .4) % 2 === 0 : braking;   // 緊急停車中はハザード点滅(ブレーキ色より優先)
+  PLAYER.tailMat.color.setHex(tailOn ? 0xff2a2a : 0x8a1010);
+  PLAYER.tailGlows.forEach(g => { g.material.opacity = tailOn ? 1 : .45; g.scale.setScalar(tailOn ? 2.2 : 1.3); });
   PLAYER.flames.forEach(f => { f.visible = nitroOn; if (nitroOn) f.scale.set(1, 1, .7 + Math.random() * .7); });
   // --- 煙(ドリフト)・ニトロの火花
   if (c.slip > 3 && Math.abs(vf) > 5) for (const sx of [.85, -.85]) if (Math.random() < .8) {

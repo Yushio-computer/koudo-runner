@@ -2007,7 +2007,7 @@ function ppStep(dt) {                                                   // 毎�
   const lead = ppLead(c, ctx); PP.lead = lead;
   if (ctx.kind !== 'ramp') { const av2 = ppLaneAvail(ctx); PP.canLeft = av2.left; PP.canRight = av2.right; } else PP.canLeft = PP.canRight = false;
   const nearLead = lead && lead.gap < Math.max(PP_GAP_MIN, lead.v * 1.0) + 20;   // まだ遠くて接近中なだけの車は「詰まってる」に含めない
-  PP.slowT = (nearLead && v > lead.v + 1.5 && lead.v < PP.set * .82) ? (PP.slowT || 0) + dt : Math.max(0, (PP.slowT || 0) - dt * 2);   // 前の車に詰まって設定速度より明らかに遅い状態が続いたら「追い越しますか」の合図
+  PP.slowT = (nearLead && lead.v < PP.set * .82) ? (PP.slowT || 0) + dt : Math.max(0, (PP.slowT || 0) - dt * 2);   // 前の車に詰まって設定速度より明らかに遅い状態が続いたら「追い越しますか」の合図(安定して追従中はv≈lead.vになるので、自分の速度がlead.vを上回っているかは見ない)
   if (PP.slowT > 1.5 && (PP.canLeft || PP.canRight) && !PP.suggested) { PP.suggested = true; ppTone([660, 880], .1, .3, 'sine', .12); }
   else if (PP.slowT <= 0 || (!PP.canLeft && !PP.canRight)) PP.suggested = false;
   if (lead) {

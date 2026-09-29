@@ -1425,7 +1425,7 @@ const LOAD_SENS = .85, LAT_LOSS_K = .6;      // タイヤの荷重依存性(荷�
 //   accelShift: 加速で前輪の荷重が抜ける割合(AWDは小さい)  knee: 限界に近づくときの頭打ちのなだらかさ(小さいほど段階的)  driveLat: アクセルで横グリップを削る割合(AWDは小さい)  downforce: ダウンフォースによる高速での横グリップ増(m/s² / (m/s)²)
 //   rollRate/rollMax: ロールの追従の速さ・上限度  pitchGain: 加減速の前後の傾きの大きさ  pitchFreq/pitchZeta: 前後の傾きのばねの速さ・粘り(小さいほど揺り戻しが大きい)  stopKick: 停止の瞬間に前のめりが戻る強さ
 //   thrRamp/thrRelease: アクセルの立ち上がり・戻りの秒  thrLinear: 踏み込みをそのまま伝える  brakeRamp/brakeRelease/brakeExp: ブレーキの立ち上がり・解除の秒・踏み増しの効き方
-const HND_DEFAULT = { steerRate: 1, steerDecay: 30, yawResp: 9, steerExp: 1, knee: 6, driveLat: 1, accelShift: 1, downforce: 0, lowSpeedPush: 0, yawRearMargin: 9, tcb: 0, lowGrip: 1, trailBrake: 0, brakeLat: 1, limitRot: 0, rotDur: .35, rollRate: 4.5, rollMax: 7, pitchGain: .0035, pitchFreq: 8, pitchZeta: .32, stopKick: .06, thrRamp: .12, thrRelease: .12, coastRamp: .15, thrLinear: false, brakeRamp: .3, brakeRelease: .15, brakeExp: 1.35 };
+const HND_DEFAULT = { steerRate: 1, steerDecay: 30, yawResp: 9, steerExp: 1, knee: 6, driveLat: 1, accelShift: 1, downforce: 0, lowSpeedPush: 0, yawRearMargin: 9, tcb: 0, lowGrip: 1, trailBrake: 0, brakeLat: 1, limitRot: 0, rotDur: .35, rollRate: 4.5, rollMax: 7, pitchGain: .005, pitchFreq: 8, pitchZeta: .24, stopKick: .11, thrRamp: .12, thrRelease: .12, coastRamp: .15, thrLinear: false, brakeRamp: .3, brakeRelease: .15, brakeExp: 1.35 };
 let H = HND_DEFAULT, ACC_EXP = 1, ACC_TABLE = null, BRAKE_FADE = null;
 function applyPhysics(p) {               // 車の物理諸元を差し替える(最大舵角・荷重移動の係数は諸元から計算し直す)
   ({ ACC0, VMAX, DRAG, COAST, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R, TRACK, CG_H, FRONT_STATIC, STEER_SF, UNDERSTEER, ROLL_DEG_PER_G, REAR_MIN } = p);
@@ -1953,7 +1953,7 @@ function ppEmergencyStep(c, dt) {
   const v = Math.hypot(c.vx, c.vz);
   PP.thr = 0; PP.brk = 1; PP.u = -1; PP.accOvr = false;                  // 最大ブレーキで停止まで固定
   PP.hazT += dt;
-  PP.emergBeepT -= dt; if (PP.emergBeepT <= 0) { PP.emergBeepT = .45; ppTone([1600], 0, .1, 'square', .2); }   // ピピピピ…という警告音
+  PP.emergBeepT -= dt; if (PP.emergBeepT <= 0) { PP.emergBeepT = .15; ppTone([1700], 0, .08, 'square', .24); $('flash').style.opacity = .2; shake = Math.min(1.2, shake + .08); }   // ピピピピピピ…と忙しく鳴らして、ビープに合わせて画面も赤く明滅・軽く揺れる
   if (v < .5) { c.vx = 0; c.vz = 0; PP.stopT += dt; if (PP.stopT > 3) ppCancel('緊急停車しました 手動で運転を再開してください'); }   // 低速域でわずかに前へ這う現象があるので、止まったら速度を直接ゼロにして確実に停止させる
   else PP.stopT = 0;
 }

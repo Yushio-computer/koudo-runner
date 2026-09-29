@@ -1953,7 +1953,7 @@ function ppEmergencyStep(c, dt) {
   const v = Math.hypot(c.vx, c.vz);
   PP.thr = 0; PP.brk = 1; PP.u = -1; PP.accOvr = false;                  // 最大ブレーキで停止まで固定
   PP.hazT += dt;
-  PP.emergBeepT -= dt; if (PP.emergBeepT <= 0) { PP.emergBeepT = .15; ppTone([1700], 0, .08, 'square', .24); $('flash').style.opacity = .2; shake = Math.min(1.2, shake + .08); }   // ピピピピピピ…と忙しく鳴らして、ビープに合わせて画面も赤く明滅・軽く揺れる
+  PP.emergBeepT -= dt; if (PP.emergBeepT <= 0) { PP.emergBeepT = .15; ppTone([1700], 0, .08, 'square', .24); shake = Math.min(1.2, shake + .08); }   // ピピピピピピ…と忙しく鳴らして、軽く揺れる(画面の明滅は光過敏の観点でやらない)
   if (v < .5) { c.vx = 0; c.vz = 0; PP.stopT += dt; if (PP.stopT > 3) ppCancel('緊急停車しました 手動で運転を再開してください'); }   // 低速域でわずかに前へ這う現象があるので、止まったら速度を直接ゼロにして確実に停止させる
   else PP.stopT = 0;
 }

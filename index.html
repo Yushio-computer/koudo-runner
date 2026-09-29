@@ -2006,7 +2006,8 @@ function ppStep(dt) {                                                   // 毎�
   if (needC > 1.2) aDes = Math.min(aDes, -Math.min(needC, 9));           // カーブに間に合わなさそうなときは、必要なぶんだけ強く(最大でフルブレーキ)
   const lead = ppLead(c, ctx); PP.lead = lead;
   if (ctx.kind !== 'ramp') { const av2 = ppLaneAvail(ctx); PP.canLeft = av2.left; PP.canRight = av2.right; } else PP.canLeft = PP.canRight = false;
-  PP.slowT = (lead && v > lead.v + 1.5 && lead.v < PP.set * .82) ? (PP.slowT || 0) + dt : Math.max(0, (PP.slowT || 0) - dt * 2);   // 前の車に詰まって設定速度より明らかに遅い状態が続いたら「追い越しますか」の合図
+  const nearLead = lead && lead.gap < Math.max(PP_GAP_MIN, lead.v * 1.8) + 20;   // まだ遠くて接近中なだけの車は「詰まってる」に含めない
+  PP.slowT = (nearLead && v > lead.v + 1.5 && lead.v < PP.set * .82) ? (PP.slowT || 0) + dt : Math.max(0, (PP.slowT || 0) - dt * 2);   // 前の車に詰まって設定速度より明らかに遅い状態が続いたら「追い越しますか」の合図
   if (PP.slowT > 1.5 && (PP.canLeft || PP.canRight) && !PP.suggested) { PP.suggested = true; ppTone([660, 880], .1, .3, 'sine', .12); }
   else if (PP.slowT <= 0 || (!PP.canLeft && !PP.canRight)) PP.suggested = false;
   if (lead) {
@@ -2020,7 +2021,7 @@ function ppStep(dt) {                                                   // 毎�
     let aNeed = rel > 0 ? -(rel * rel) / (2 * Math.max(gap - 4, .8)) : 0;                                     // 安全弁: 今の相対速度のまま詰まったら危ないので、常に効かせておく(前の車が止まりきった後もこれは切れない)
     if (PP.aLead < -1.5 && lead.v > .3) aNeed = Math.min(aNeed, -(v * v) / (2 * Math.max(gap + lead.v * lead.v / (2 * -PP.aLead) - 4, 1)));   // 前の車が急ブレーキ中: 止まるまで同じ強さで踏み続けるものとして、止まれる減速を出す
     else if (PP.aLead < -1.5) aNeed = Math.min(aNeed, -(v * v) / (2 * Math.max(gap - 4, 1)));
-    if (aNeed < 0) aDes = Math.min(aDes, aNeed);
+    if (aNeed < -.3) aDes = Math.min(aDes, aNeed);                                                            // ごくわずかに前の車より速いだけ(ガードが常時発動して全く近づけなくなる)は無視する
   }
   const aRaw = (v - PP.vPrev) / Math.max(dt, 1e-3); PP.vPrev = v; PP.aMeas += (aRaw - PP.aMeas) * Math.min(1, dt / .3);
   if (keys.up) { PP.accOvr = true; PP.thr = 1; PP.brk = 0; PP.u = c.p; return; } PP.accOvr = false;      // アクセルを踏んでいる間は運転手の操作(離すと設定速度へ戻る)

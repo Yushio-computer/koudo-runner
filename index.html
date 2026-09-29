@@ -1147,13 +1147,19 @@ function updateFire(dt) {                            // 出火中の炎と煙(�
    リプレイ(衝突・急ブレーキのハイライトを自動録画)
    ・常に直近数秒をリングバッファに録画。衝突/急ブレーキを検知したら少し追加録画してクリップ確定
    ・確定すると右下にボタン表示(触らなければ数秒で消える・次のイベントで上書き。溜め込まない)
-   ・押すと一時停止してリプレイ再生(自車の動きだけ。周りの車は再生中の見た目上は静止)
+   ・押すと一時停止してリプレイ再生(自車の動き+近く(140m以内)の車の位置も録画・再現)
    ===================================================================== */
-const REPLAY_BUF_SEC = 6, REPLAY_POST_SEC = 1.3, REPLAY_COOLDOWN = 4, REPLAY_BTN_SHOW = 8;
+const REPLAY_BUF_SEC = 6, REPLAY_POST_SEC = 1.3, REPLAY_COOLDOWN = 4, REPLAY_BTN_SHOW = 8, REPLAY_TRAFFIC_R2 = 140 * 140;
 let replayBuf = [], replayClip = null, replayPendingT = 0, replayCoolT = 0, replayBtnT = 0;
 const replay = { active: false, i: 0, saved: null };
 function replaySnapshot(dt) {
-  replayBuf.push({ dt, x: car.x, y: car.y, z: car.z, h: car.h, pitch: car.pitch, roll: car.roll, tumP: car.tumP || 0, tumR: car.tumR || 0, hop: car.hop || 0, steer: car.steer, wheelRot: car.wheelRot, vx: car.vx, vz: car.vz, b: car.b, nitro: nitroOn });
+  let traf = null;
+  for (let i = 0; i < traffic.length; i++) {
+    const tr = traffic[i]; if (!tr.active) continue;
+    const dx = tr.x - car.x, dz = tr.z - car.z; if (dx * dx + dz * dz > REPLAY_TRAFFIC_R2) continue;
+    const g = tr.m.group; (traf || (traf = [])).push({ i, x: g.position.x, y: g.position.y, z: g.position.z, pitch: g.rotation.x, h: g.rotation.y });
+  }
+  replayBuf.push({ dt, x: car.x, y: car.y, z: car.z, h: car.h, pitch: car.pitch, roll: car.roll, tumP: car.tumP || 0, tumR: car.tumR || 0, hop: car.hop || 0, steer: car.steer, wheelRot: car.wheelRot, vx: car.vx, vz: car.vz, b: car.b, nitro: nitroOn, traf });
   let total = 0; for (const s of replayBuf) total += s.dt;
   while (total > REPLAY_BUF_SEC + REPLAY_POST_SEC && replayBuf.length > 1) total -= replayBuf.shift().dt;
   if (replayCoolT > 0) replayCoolT -= dt;
@@ -1187,6 +1193,7 @@ function replayStep(dt) {
   PLAYER.tailGlows.forEach(g => { g.material.opacity = braking ? 1 : .45; g.scale.setScalar(braking ? 2.2 : 1.3); });
   nitroOn = !!f.nitro;
   PLAYER.flames.forEach(fl => { fl.visible = nitroOn; if (nitroOn) fl.scale.set(1, 1, .7 + Math.random() * .7); });
+  if (f.traf) for (const tr of f.traf) { const g = traffic[tr.i] && traffic[tr.i].m.group; if (g) { g.position.set(tr.x, tr.y, tr.z); g.rotation.set(tr.pitch, tr.h, 0); } }
   replay.i++;
   if (replay.i >= clip.length) replayEnd();
 }

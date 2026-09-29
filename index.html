@@ -120,7 +120,7 @@
       <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
       <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)　<kbd>F</kbd>天候切替(晴れ/雨/霧)</div>
       <div style="opacity:.85">衝突・急ブレーキをすると右下に📷が出ます。押すとその場面をリプレイ(<kbd>Esc</kbd>で戻る)</div>
-      <div style="opacity:.85">ProPILOT作動中、<kbd>A</kbd><kbd>D</kbd>を軽くタップすると自動で隣の車線へ(車線変更支援)。長押しすると今まで通り手動運転</div>
+      <div style="opacity:.85">ProPILOT作動中、前の車に詰まって「追い越しますか?」と出たら<kbd>A</kbd>を軽くタップで追越車線へ(車線変更支援)。戻るときは<kbd>D</kbd>。長押しすると今まで通り手動運転</div>
     </div>
     <div class="go">Enter かクリックでスタート</div>
   </div>
@@ -1840,7 +1840,7 @@ function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色
   freqs.forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * gap; o.type = type; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g).connect(master); o.start(t); o.stop(t + dur + .03); });
 }
 const ppMsg = (text, sec = 2.6) => { PP.msg = text; PP.msgT = sec; };
-function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.hudT = 0; PP.msgT = 0; PP.keyT = 0; PP.laneChT = 0; }
+function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.hudT = 0; PP.msgT = 0; PP.keyT = 0; PP.laneChT = 0; PP.slowT = 0; PP.canLeft = PP.canRight = false; }
 function ppLaneClear(ctx, lane) {                                      // 車線変更支援: 変更先の車線の前後(PP_LC_GAP以内)に車がいないか
   const L = ctx.kind === 'deck' ? DECK.len : 1e6;
   for (const t of traffic) {
@@ -1854,11 +1854,21 @@ function ppLaneClear(ctx, lane) {                                      // 車線
   }
   return true;
 }
-function ppLaneChange(ctx, dir) {                                      // 車線変更支援: dir +1=左(keys.left) / -1=右(keys.right)へ、隣の車線が空いていれば変更
-  const sorted = [...ctx.lanes].sort((a, b) => a - b);                  // 値が大きいほど左(centerAt/pathAtの符号に合わせる)
+function ppLaneIdx(ctx) {                                              // 値が大きいほど左(centerAt/pathAtの符号に合わせる)。今の車線がソート後の何番目か
+  const sorted = [...ctx.lanes].sort((a, b) => a - b);
   let idx = 0; for (let i = 1; i < sorted.length; i++) if (Math.abs(sorted[i] - PP.laneT) < Math.abs(sorted[idx] - PP.laneT)) idx = i;
+  return { sorted, idx };
+}
+const ppOvertakeOk = () => PP.slowT > 1.5 || PP.suggested;             // 追越車線(値が大きい方)へ入っていいのは、前の車に詰まっている時だけ。戻る方向はいつでもOK
+function ppLaneAvail(ctx) {                                            // 車線変更支援: 左右それぞれ、隣の車線があって・空いているか(HUD表示用)
+  const { sorted, idx } = ppLaneIdx(ctx);
+  return { left: idx + 1 < sorted.length && ppOvertakeOk() && ppLaneClear(ctx, sorted[idx + 1]), right: idx - 1 >= 0 && ppLaneClear(ctx, sorted[idx - 1]) };
+}
+function ppLaneChange(ctx, dir) {                                      // 車線変更支援: dir +1=左(keys.left) / -1=右(keys.right)へ、隣の車線が空いていれば変更
+  const { sorted, idx } = ppLaneIdx(ctx);
   const ni = idx + (dir > 0 ? 1 : -1);
   if (ni < 0 || ni >= sorted.length) { ppMsg('その方向に車線がありません', 1.6); return; }
+  if (ni > idx && !ppOvertakeOk()) { ppMsg('前の車に追いついた時だけ車線変更できます(追越車線なので)', 1.8); ppTone([392], 0, .18, 'triangle', .12); return; }
   const target = sorted[ni];
   if (!ppLaneClear(ctx, target)) { ppMsg('車線変更を見合わせました(車両あり)', 2); ppTone([392], 0, .18, 'triangle', .12); return; }
   PP.laneT = target; PP.laneChT = 2.5; ppTone([740, 988], .09, .3, 'sine', .14); ppMsg('車線変更', 1.4);
@@ -1994,6 +2004,10 @@ function ppStep(dt) {                                                   // 毎�
   let aDes = clamp(.5 * (vt - v), -3, 1.6);
   if (needC > 1.2) aDes = Math.min(aDes, -Math.min(needC, 9));           // カーブに間に合わなさそうなときは、必要なぶんだけ強く(最大でフルブレーキ)
   const lead = ppLead(c, ctx); PP.lead = lead;
+  if (ctx.kind !== 'ramp') { const av2 = ppLaneAvail(ctx); PP.canLeft = av2.left; PP.canRight = av2.right; } else PP.canLeft = PP.canRight = false;
+  PP.slowT = (lead && v > lead.v + 1.5 && lead.v < PP.set * .82) ? (PP.slowT || 0) + dt : Math.max(0, (PP.slowT || 0) - dt * 2);   // 前の車に詰まって設定速度より明らかに遅い状態が続いたら「追い越しますか」の合図
+  if (PP.slowT > 1.5 && (PP.canLeft || PP.canRight) && !PP.suggested) { PP.suggested = true; ppTone([660, 880], .1, .3, 'sine', .12); }
+  else if (PP.slowT <= 0 || (!PP.canLeft && !PP.canRight)) PP.suggested = false;
   if (lead) {
     const gap = lead.gap, want = Math.max(PP_GAP_MIN, lead.v * 1.8);      // 前の車との車間は、時速(km/h)の半分ぐらいのm(≒1.8秒ぶん)を保つ。前の車の速さを基準にする(自分の速さだと、詰めている間じわじわ目標が動いて手前で減速してしまう)。止まる直前は最低8m
     if (PP.leadId !== lead.id) { PP.leadId = lead.id; PP.leadV = lead.v; PP.aLead = 0; }                       // 前の車が変わったら、加速度の推定をやり直す
@@ -2037,7 +2051,10 @@ function ppHud(dt) {                                                    // 水�
     const speedLine = merging
       ? `<div class="pps">合流支援: <b>${Math.round((PP.mergeV || 0) * 3.6)}</b> km/hに加速中</div>`
       : `<div class="pps"><b>SET ${Math.round(PP.set * 3.6)}</b> km/h　${ld ? '前方車両 ' + Math.round(ld.gap) + 'm' : '前方に車なし'}</div>`;
-    body = `<div class="ppt">${wheel}ProPILOT<span> 作動中</span></div>${braking ? '<div class="ppa">⚠ 急ブレーキ</div>' : road}${speedLine}${lc}${ov ? `<div class="pps warn">${ov}</div>` : ''}`;
+    const laneHint = !braking && !merging && PP.laneChT <= 0 && PP.canRight ? '<div class="ppc" style="margin-top:1px"><b class="ok">⇨ 車線に戻れます</b></div>' : '';
+    const suggest = !braking && PP.canLeft
+      ? '<div class="pps" style="color:#ffd34d;font-weight:800">前の車が遅いです。追い越しますか?(Aをタップ)</div>' : '';
+    body = `<div class="ppt">${wheel}ProPILOT<span> 作動中</span></div>${braking ? '<div class="ppa">⚠ 急ブレーキ</div>' : road}${speedLine}${laneHint}${suggest}${lc}${ov ? `<div class="pps warn">${ov}</div>` : ''}`;
   } else if (PP.msgT > 0) { mode = 'msg'; body = `<div class="ppt">${wheel}ProPILOT</div><div class="pps">${PP.msg}</div>`; }
   else if (PP.hintOk) { mode = 'hint'; body = `<div class="pps"><kbd>P</kbd> ProPILOT</div>`; }
   const key = mode + '|' + body; if (PP.hud === key) return; PP.hud = key;

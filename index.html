@@ -118,8 +118,9 @@
       <div style="opacity:.85">スタート画面:　<kbd>A</kbd><kbd>D</kbd>コース選択　<kbd>W</kbd><kbd>S</kbd>車種選択　<kbd>Enter</kbd>/<kbd>Space</kbd>スタート</div>
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
       <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
-      <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)</div>
+      <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)　<kbd>F</kbd>天候切替(晴れ/雨/霧)</div>
       <div style="opacity:.85">衝突・急ブレーキをすると右下に📷が出ます。押すとその場面をリプレイ(<kbd>Esc</kbd>で戻る)</div>
+      <div style="opacity:.85">ProPILOT作動中、<kbd>A</kbd><kbd>D</kbd>を軽くタップすると自動で隣の車線へ(車線変更支援)。長押しすると今まで通り手動運転</div>
     </div>
     <div class="go">Enter かクリックでスタート</div>
   </div>
@@ -323,6 +324,11 @@ const MOON_DIR = new THREE.Vector3(0, 1, 0);
 const headlight = new THREE.SpotLight(0xfff0d0, 0, 120, .5, .7, 1.5);        // 夜だけ点く自車のヘッドライト
 scene.add(headlight, headlight.target);
 const carEnvMats = new Set();                                    // 車の素材(環境の映り込みを昼夜で変える)
+let weather = 'clear';                                            // weather: 'clear' | 'rain' | 'fog'(Fキーで巡回)。updateSkyが初期化時に読むので、ここ(定義前)に置く
+const WX_GRIP = { clear: 1, rain: .72, fog: 1 };                  // 路面のグリップ倍率(雨だけ滑りやすい)
+const WX_VIS = { clear: 1, rain: .55, fog: .14 };                 // 見える距離の倍率(霧はかなり手前まで)
+const WX_GREY = new THREE.Color(0x9098a0);
+const wxGrip = () => WX_GRIP[weather];
 function updateSky(force) {
   const nowMs = Date.now(); if (!force && nowMs - TOD.last < 5000) return; TOD.last = nowMs;
   const h = todHours(), alt = 60 * Math.sin(2 * Math.PI * (h - 6) / 24), altR = alt * Math.PI / 180, az = 2 * Math.PI * (h - 12) / 24;
@@ -339,12 +345,14 @@ function updateSky(force) {
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   sky.geometry.attributes.color.needsUpdate = true;
-  scene.fog.color.copy(cH); scene.fog.near = 90 - night * 40; scene.fog.far = 1000 - night * 250;
+  scene.fog.color.copy(cH); if (weather !== 'clear') scene.fog.color.lerp(WX_GREY, weather === 'fog' ? .6 : .35);
+  scene.fog.near = (90 - night * 40) * WX_VIS[weather]; scene.fog.far = (1000 - night * 250) * WX_VIS[weather];
   mountains.material.color.copy(skyLerp(alt, 9));
   // 光
   const sunI = skyNum(alt, 5), moonI = night * .45;
   if (sunI >= moonI) { sunLight.color.copy(skyLerp(alt, 4)); sunLight.intensity = sunI; } else { sunLight.color.setHex(0x8fa4d8); sunLight.intensity = moonI; }
   hemiLight.color.copy(skyLerp(alt, 6)); hemiLight.groundColor.copy(skyLerp(alt, 7)); hemiLight.intensity = skyNum(alt, 8);
+  if (weather === 'rain') { sunLight.intensity *= .6; hemiLight.intensity *= .75; }             // 雨: 曇りがちに暗く
   // 太陽・月・星・ヘッドライト
   const sunVis = alt > -4; sunCore.visible = sunHalo.visible = sunVis;
   sunHalo.material.color.copy(skyLerp(alt, 4)); sunHalo.material.opacity = .75 * clamp((alt + 4) / 8, 0, 1) * (1 - clamp((alt - 25) / 30, 0, .6));
@@ -888,6 +896,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyB' && VEH.powertrain.coastB) { decelSel = decelSel === 'D' ? 'B' : 'D'; popup('シフト ' + decelSel + (decelSel === 'B' ? '(回生を強める)' : '(穏やかな減速)')); }
   if (e.code === 'KeyM') { muted = !muted; if (master) master.gain.value = muted ? 0 : .5; }
   if (e.code === 'KeyN') { todEnabled = !todEnabled; updateSky(true); if (typeof refreshEnv === 'function' && envReady) refreshEnv(); popup(todEnabled ? '現実の時間と連動: ON' : '現実の時間と連動: OFF(常に昼)'); }
+  if (e.code === 'KeyF') { weather = weather === 'clear' ? 'rain' : weather === 'rain' ? 'fog' : 'clear'; updateSky(true); popup(weather === 'rain' ? '天候: 雨(滑りやすい)' : weather === 'fog' ? '天候: 霧(視界不良)' : '天候: 晴れ'); }
   if (e.code === 'Enter' || (e.code === 'Space' && state === 'ready')) { if (state === 'ready') startGame(); else if (state === 'over') restart(); }
   if (e.code === 'KeyR') { if (state === 'over') restart(); else if (state === 'play') recover(); }
   if (e.code === 'Escape' && replay.active) replayEnd();
@@ -1477,7 +1486,7 @@ function restart() {
   $('ovOver').classList.remove('on');
   if (course === 'tsukuba') beginCountdown(); else state = 'play';
 }
-const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して10m吹き飛ぶ)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、外周の高架(首都高)へ「入」のランプから乗って合流する。高架は外周を1周していて、「出」のランプで降りられる。渋滞・事故渋滞は、ミニマップのアイコン(オレンジの丸=渋滞、赤い三角=事故)でわかる。右上のミニマップで信号・目標を確認(T でワープ)。高架の上ではセレナの P キーで ProPILOT が使える。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。セレナなら P キーで ProPILOT(車線を保って前の車に追従)が使える。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
+const COURSE_DESC = { smash: '障害物(木箱・タル・コーン・コンクリートブロック)と地雷(踏むと爆発して10m吹き飛ぶ)が置かれまくった直線を走り抜けて、とにかく壊すだけのステージ。タイムアップなし。連続で壊すほどコンボ倍率アップ(車・信号なし)。', city: '信号のある街。赤信号で止まり、駐車場の緑の枠へ駐車し、外周の高架(首都高)へ「入」のランプから乗って合流する。高架は外周を1周していて、「出」のランプで降りられる。渋滞・事故渋滞は、ミニマップのアイコン(オレンジの丸=渋滞、赤い三角=事故)でわかる。右上のミニマップで信号・目標を確認(T でワープ)。高架の上・入るランプの上ではセレナの P キーで ProPILOT が使える(ランプでは合流先の速さに合わせて自動で加速)。', straight: 'カーブが一切ない永遠の直線。ハンドルを切らずにアクセルを踏み続けるだけ。0→100 / 200 / 300km/h のタイムと最高速を計測します(車なし)。', public: '夕暮れの峠道。左側通行の対面4車線。車の間をすり抜けるとスコア。セレナなら P キーで ProPILOT(車線を保って前の車に追従)が使える。', tsukuba: '筑波サーキット(TC2000・約2.0km、時計回り)で3周のレース。全車一斉スタート、あなたはポールポジション。順位を競う。' };
 function refreshCourseUI() {
   document.querySelectorAll('[data-course]').forEach(b => b.classList.toggle('on', b.dataset.course === course));
   $('courseDesc').textContent = COURSE_DESC[course];
@@ -1822,7 +1831,8 @@ function damage(v) { if (DAMAGE_ENABLED) car.health = Math.max(0, car.health - v
    ・作動したときの速さが「設定速度」。車線の中央を走り、前の車がいれば車間をあけて追従、カーブの手前で自動で減速
    ・ブレーキ(S/↓)・サイドブレーキ・もう一度P・道路を出るで解除。アクセルを踏むと加速(離すと設定速度へ戻る)。ハンドルを切ると車線維持を一時停止(車線変更もできる)
    ===================================================================== */
-const PP = { state: 'off', t: 0, set: 0, laneT: 0, thr: 0, brk: 0, steer: 0, u: 0, vPrev: 0, aMeas: 0, lead: null, laneSeen: 0, leadSeen: false, steerOvr: 0, accOvr: false, lostT: 0, msg: '', msgT: 0, hud: '', ldA: 1.3, ldB: 8, ki: 0, kE: 0, kH: 0, kL: 0, kC: 100, cmdLP: undefined, leadId: null, leadV: 0, aLead: 0, hardBrakeT: 0 };
+const PP = { state: 'off', t: 0, set: 0, laneT: 0, thr: 0, brk: 0, steer: 0, u: 0, vPrev: 0, aMeas: 0, lead: null, laneSeen: 0, leadSeen: false, steerOvr: 0, accOvr: false, lostT: 0, msg: '', msgT: 0, hud: '', ldA: 1.3, ldB: 8, ki: 0, kE: 0, kH: 0, kL: 0, kC: 100, cmdLP: undefined, leadId: null, leadV: 0, aLead: 0, hardBrakeT: 0, keyT: 0, laneChT: 0, lastKeyDir: 0 };
+const PP_LC_TAP = .3, PP_LC_GAP = 14;                                   // 車線変更: これ未満で離せば合図とみなすタップの長さ(秒)・変更先で必要な前後の車間(m)
 const PP_LEN = 4.7, PP_GAP_MIN = 8, PP_ALAT = 4.0, PP_DEC = 2.6;                     // 自車の長さ・保つ車間距離の下限(m)・カーブで許す横加速度(m/s²)・カーブ減速(m/s²)                     // 自車の長さ・車間時間(秒)・カーブで許す横加速度(m/s²)
 const ppAvail = () => vehicleId === 'serena' && (course === 'public' || course === 'city');
 function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色のシステム音(サイン波の柔らかいチャイム)
@@ -1830,7 +1840,29 @@ function ppTone(freqs, gap, dur, type = 'sine', vol = .16) {           // 水色
   freqs.forEach((f, i) => { const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * gap; o.type = type; o.frequency.value = f; g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + .012); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g).connect(master); o.start(t); o.stop(t + dur + .03); });
 }
 const ppMsg = (text, sec = 2.6) => { PP.msg = text; PP.msgT = sec; };
-function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.hudT = 0; PP.msgT = 0; }
+function ppReset() { PP.hintOk = false; PP.slipT = 0; PP.state = 'off'; PP.thr = PP.brk = 0; PP.u = 0; PP.steerOvr = 0; PP.accOvr = false; PP.lead = null; PP.leadId = null; PP.aLead = 0; PP.hardBrakeT = 0; PP.hudT = 0; PP.msgT = 0; PP.keyT = 0; PP.laneChT = 0; }
+function ppLaneClear(ctx, lane) {                                      // 車線変更支援: 変更先の車線の前後(PP_LC_GAP以内)に車がいないか
+  const L = ctx.kind === 'deck' ? DECK.len : 1e6;
+  for (const t of traffic) {
+    if (!t.active) continue;
+    let tl, tu;
+    if (ctx.kind === 'road') { if (t.dir !== 1) continue; tl = t.d; tu = t.s; }
+    else { if (!(t.city && t.city.mode === 'deck')) continue; tl = t.city.lane; tu = t.city.u; }
+    if (Math.abs(tl - lane) > 1.9) continue;
+    let rel = tu - ctx.s; rel = ((rel + L / 2) % L + L) % L - L / 2;
+    if (Math.abs(rel) < PP_LC_GAP) return false;
+  }
+  return true;
+}
+function ppLaneChange(ctx, dir) {                                      // 車線変更支援: dir +1=左(keys.left) / -1=右(keys.right)へ、隣の車線が空いていれば変更
+  const sorted = [...ctx.lanes].sort((a, b) => a - b);                  // 値が大きいほど左(centerAt/pathAtの符号に合わせる)
+  let idx = 0; for (let i = 1; i < sorted.length; i++) if (Math.abs(sorted[i] - PP.laneT) < Math.abs(sorted[idx] - PP.laneT)) idx = i;
+  const ni = idx + (dir > 0 ? 1 : -1);
+  if (ni < 0 || ni >= sorted.length) { ppMsg('その方向に車線がありません', 1.6); return; }
+  const target = sorted[ni];
+  if (!ppLaneClear(ctx, target)) { ppMsg('車線変更を見合わせました(車両あり)', 2); ppTone([392], 0, .18, 'triangle', .12); return; }
+  PP.laneT = target; PP.laneChT = 2.5; ppTone([740, 988], .09, .3, 'sine', .14); ppMsg('車線変更', 1.4);
+}
 function ppCancel(why, quiet) { const was = PP.state; ppReset(); if (was === 'on') { if (!quiet) ppTone([1175, 1175, 1175], .17, .11, 'sine', .15); ppMsg(why || 'ProPILOT 解除', 3); } else if (was === 'search') ppMsg(why || '準備をやめました', 2.4); }
 function ppCtx(c) {                                                     // ProPILOTが使える道の上にいるか。いれば、その道の座標関数を返す
   if (course === 'public') {
@@ -1841,7 +1873,15 @@ function ppCtx(c) {                                                     // ProPI
       k: u => Math.abs(centerAt(s + u).k) };
   }
   if (course === 'city') {
-    if (cityLevel(c).zone !== 'deck') return null;
+    const lv = cityLevel(c);
+    if (lv.zone === 'ramp' && lv.rp.kind === 'on') {                    // 合流支援: 登るランプの上でも(単線・車線変更なし)
+      const rp = lv.rp, r = lv.r, hh = pathAt(rp, r.s, 0).h;
+      if (Math.abs(angDiff(c.h, hh)) > .6 || Math.abs(r.lat) > rp.half + .6) return null;
+      return { kind: 'ramp', s: r.s, lat: r.lat, hh, lanes: [0], merge: ppMergeSpeed(rp),
+        at: (u, lane) => pathAt(rp, r.s + u, lane),
+        k: u => Math.abs(angDiff(pathAt(rp, r.s + u + 8, 0).h, pathAt(rp, r.s + u, 0).h)) / 8 };
+    }
+    if (lv.zone !== 'deck') return null;
     const p = pathProject(DECK, c.x, c.z), hh = pathAt(DECK, p.s, 0).h;
     if (Math.abs(angDiff(c.h, hh)) > .6 || Math.abs(p.lat) > DECK_W / 2) return null;
     const s = p.s;
@@ -1851,7 +1891,18 @@ function ppCtx(c) {                                                     // ProPI
   }
   return null;
 }
+function ppMergeSpeed(rp) {                                             // 合流支援: ランプが高架とつながる所の付近を走っている車の速さを見て、合わせるべき目安を出す(見つからなければ80km/h相当)
+  const end = rp.pts[rp.n - 1], q = pathProject(DECK, end[0], end[1]), L = DECK.len;
+  let sum = 0, n = 0;
+  for (const t of traffic) {
+    if (!t.active || !t.city || t.city.mode !== 'deck') continue;
+    let rel = t.city.u - q.s; rel = ((rel + L / 2) % L + L) % L - L / 2;
+    if (Math.abs(rel) < 150) { sum += Math.abs(t.city.v); n++; }
+  }
+  return n ? sum / n : 22;
+}
 function ppLead(c, ctx) {                                               // 自分の車線の前方にいる、いちばん近い車(止まっている事故車も)。gap: 車間(m)、v: その車の進む速さ
+  if (ctx.kind === 'ramp') return null;                                 // ランプの上は交通がいない(合流支援は速さを合わせるだけ)
   let best = null; const L = DECK.len;
   for (const t of traffic) {
     if (!t.active) continue;
@@ -1878,7 +1929,7 @@ function ppToggle() {
   if (state !== 'play' || !ppAvail()) return;
   if (PP.state !== 'off') { ppCancel('ProPILOT 解除'); return; }
   const ctx = ppCtx(car);
-  if (!ctx) { ppMsg(course === 'city' ? 'ProPILOTは 高架の高速道路 の上で使えます' : 'ProPILOTは 車線の中を走っているときに使えます'); ppTone([330, 247], .12, .22, 'triangle', .14); return; }
+  if (!ctx) { ppMsg(course === 'city' ? 'ProPILOTは 高架の高速道路(入るランプの上も含む)で使えます' : 'ProPILOTは 車線の中を走っているときに使えます'); ppTone([330, 247], .12, .22, 'triangle', .14); return; }
   PP.state = 'search'; PP.t = 0; PP.laneSeen = 0; PP.leadSeen = false; PP.lostT = 0; PP.laneT = ppNearLane(ctx, ctx.lat); ppTone([988], 0, .22, 'sine', .13);
 }
 function ppStep(dt) {                                                   // 毎フレーム: 準備中の確認・作動中のアクセル/ブレーキ/ハンドルの指示(stepPlayerが読む)
@@ -1903,13 +1954,22 @@ function ppStep(dt) {                                                   // 毎�
   }
   // ---- 作動中
   if (!ctx) { ppCancel(course === 'city' ? '高速道路を出ます ProPILOT 解除' : '車線をはずれました ProPILOT 解除'); return; }
+  PP.kind = ctx.kind; PP.mergeV = ctx.merge;
   if (keys.down || keys.space) { ppCancel('ProPILOT 解除(ブレーキ)'); return; }
   PP.slipT = c.slip > 3.5 ? (PP.slipT || 0) + dt : 0;
   if (PP.slipT > .25) { ppCancel('ProPILOT 解除(車体が不安定)'); return; }                   // 車体が横に流れている状態が続いたら解除
   const lane = PP.laneT;
   if (Math.abs(ctx.lat - lane) > 3.2 && PP.steerOvr <= 0) { PP.lostT += dt; if (PP.lostT > 1.2) { ppCancel('車線を認識できません ProPILOT 解除'); return; } } else PP.lostT = 0;
   // --- 横: 車線の中央へ向かう追従(前方の一点を目指す)
-  if (keys.left || keys.right) { PP.steerOvr = .7; PP.iSt = 0; } else if (PP.steerOvr > 0) { PP.steerOvr -= dt; if (PP.steerOvr <= 0) { const vLat = c.vx * Math.cos(ctx.hh) - c.vz * Math.sin(ctx.hh); PP.laneT = ppNearLane(ctx, ctx.lat + vLat * .8); PP.steer = c.steer; } }      // 横に動いている勢いを見込んで、行き着く車線を選ぶ
+  if (keys.left || keys.right) {                                       // 短くタップ: 自動で隣の車線へ(車線変更支援)。長押し: 今まで通り手動で運転を引き継ぐ
+    PP.keyT = (PP.keyT || 0) + dt; PP.lastKeyDir = keys.left ? 1 : -1;
+    if (PP.keyT > PP_LC_TAP) { PP.steerOvr = .7; PP.iSt = 0; }
+  } else {
+    if (PP.keyT > 0 && PP.keyT <= PP_LC_TAP) ppLaneChange(ctx, PP.lastKeyDir);
+    PP.keyT = 0;
+    if (PP.steerOvr > 0) { PP.steerOvr -= dt; if (PP.steerOvr <= 0) { const vLat = c.vx * Math.cos(ctx.hh) - c.vz * Math.sin(ctx.hh); PP.laneT = ppNearLane(ctx, ctx.lat + vLat * .8); PP.steer = c.steer; } }      // 横に動いている勢いを見込んで、行き着く車線を選ぶ
+  }
+  PP.laneChT = Math.max(0, (PP.laneChT || 0) - dt);
   {
     const Ld0 = clamp(v * PP.ldA + PP.ldB, 12, 80), Ld = Math.max(12, Ld0 / (1 + PP.kC * ctx.k(Ld0 * .5))), P = ctx.at(Ld, PP.laneT), dx = P.x - c.x, dz = P.z - c.z;
     const yL = dx * Math.cos(c.h) - dz * Math.sin(c.h), xF = dx * Fx + dz * Fz, kappa0 = 2 * yL / (xF * xF + yL * yL + 1e-6), kappa = kappa0 + PP.kE * (PP.laneT - ctx.lat) + PP.kH * angDiff(ctx.hh, c.h) / Ld;
@@ -1930,7 +1990,7 @@ function ppStep(dt) {                                                   // 毎�
     vc = Math.min(vc, Math.sqrt(vl * vl + 2 * PP_DEC * Math.max(0, a - 6)));                                    // ふだんの、気持ちのいい減速で間に合う速さ
     if (v > vl) needC = Math.max(needC, (v * v - vl * vl) / (2 * Math.max(a - 9, 3)));                          // 先のカーブの限界速度に、9m手前には収まっているという厳しめの余裕で合わせる。間に合わないぶんだけ強く減速(needC)。1つの式で、軽い減速からフルブレーキまで連続して強くなる(急に切り替わらない)
   }
-  const vt = Math.min(PP.set, vc);
+  const vt = Math.min(ctx.kind === 'ramp' ? Math.max(PP.set, ctx.merge) : PP.set, vc);   // 合流支援: ランプの上では設定速度より、合流先の交通の速さを優先して加速
   let aDes = clamp(.5 * (vt - v), -3, 1.6);
   if (needC > 1.2) aDes = Math.min(aDes, -Math.min(needC, 9));           // カーブに間に合わなさそうなときは、必要なぶんだけ強く(最大でフルブレーキ)
   const lead = ppLead(c, ctx); PP.lead = lead;
@@ -1972,7 +2032,12 @@ function ppHud(dt) {                                                    // 水�
     mode = braking ? 'on brake' : 'on'; const ld = PP.lead, ov = PP.accOvr ? 'アクセル操作中' : PP.steerOvr > 0 ? 'ハンドル操作中(車線維持を一時停止)' : '';
     const gy = ld ? 30 - clamp(ld.gap / Math.max(PP_GAP_MIN, v * 1.8), 0, 1) * 22 : 0;
     const road = `<svg viewBox="0 0 120 52" width="150" height="65"><path d="M30 52 L52 2 M90 52 L68 2" stroke="#4cd0ff" stroke-width="3" fill="none" stroke-linecap="round" ${PP.steerOvr > 0 ? 'opacity=".35"' : ''}/><rect x="52" y="38" width="16" height="12" rx="3" fill="#bff0ff"/>${ld ? `<rect x="${60 - 7 - (30 - gy) / 6}" y="${gy}" width="${14 + (30 - gy) / 3}" height="${8 + (30 - gy) / 4}" rx="2.5" fill="#4cd0ff"/>` : ''}</svg>`;
-    body = `<div class="ppt">${wheel}ProPILOT<span> 作動中</span></div>${braking ? '<div class="ppa">⚠ 急ブレーキ</div>' : road}<div class="pps"><b>SET ${Math.round(PP.set * 3.6)}</b> km/h　${ld ? '前方車両 ' + Math.round(ld.gap) + 'm' : '前方に車なし'}</div>${ov ? `<div class="pps warn">${ov}</div>` : ''}`;
+    const lc = !braking && PP.laneChT > 0 ? '<div class="pps" style="color:#7fdcff">⇄ 車線変更中</div>' : '';
+    const merging = PP.kind === 'ramp';
+    const speedLine = merging
+      ? `<div class="pps">合流支援: <b>${Math.round((PP.mergeV || 0) * 3.6)}</b> km/hに加速中</div>`
+      : `<div class="pps"><b>SET ${Math.round(PP.set * 3.6)}</b> km/h　${ld ? '前方車両 ' + Math.round(ld.gap) + 'm' : '前方に車なし'}</div>`;
+    body = `<div class="ppt">${wheel}ProPILOT<span> 作動中</span></div>${braking ? '<div class="ppa">⚠ 急ブレーキ</div>' : road}${speedLine}${lc}${ov ? `<div class="pps warn">${ov}</div>` : ''}`;
   } else if (PP.msgT > 0) { mode = 'msg'; body = `<div class="ppt">${wheel}ProPILOT</div><div class="pps">${PP.msg}</div>`; }
   else if (PP.hintOk) { mode = 'hint'; body = `<div class="pps"><kbd>P</kbd> ProPILOT</div>`; }
   const key = mode + '|' + body; if (PP.hud === key) return; PP.hud = key;
@@ -2018,7 +2083,7 @@ function stepPlayer(dt) {
   c.Ff = clamp(FRONT_STATIC - K_LONG * (c.accS > 0 ? c.accS * H.accelShift : c.accS), .3, .9);
   const loadF = c.Ff / FRONT_STATIC, loadR = (1 - c.Ff) / (1 - FRONT_STATIC);
   const tau = Math.min(K_LAT * Math.abs(c.aLat), .6);
-  const base = (c.grass ? .5 : 1) * (MU_LAT * G_ACC + H.downforce * av * av) * lerp(H.lowGrip, 1, smooth(av / 25)) * (1 - LAT_LOSS_K * tau * tau) * Math.sqrt(1 - (c.aLongF / BRAKE_MAX) ** 2);
+  const base = (c.grass ? .5 : 1) * wxGrip() * (MU_LAT * G_ACC + H.downforce * av * av) * lerp(H.lowGrip, 1, smooth(av / 25)) * (1 - LAT_LOSS_K * tau * tau) * Math.sqrt(1 - (c.aLongF / BRAKE_MAX) ** 2);
   const capF = base * Math.pow(loadF, LOAD_SENS);             // 前軸が出せる横加速度の上限(荷重が増えれば上がる)
   let capR = Math.min(Math.max(base * Math.pow(loadR, LOAD_SENS), REAR_MIN * MU_LAT * G_ACC), hb ? 4.5 : 1e9);   // 後軸(サイドブレーキで大きく低下)
   c.capF = capF; c.capR = capR;
@@ -2070,7 +2135,7 @@ function stepPlayer(dt) {
   let dec = DRAG * vf * vf + (vf !== 0 ? coastConst : 0);
   // カーブ中はブレーキの効きを抑えて、曲がるためのグリップを残す(ABS・横滑り防止装置の旋回優先。キーは全開か0なので、これがないと踏んだ瞬間に曲がれなくなる)
   const latUse = Math.min(1, Math.abs(c.aLat) / (MU_LAT * G_ACC));
-  const aBrake = vf > .4 ? BRAKE_MAX * (c.grass ? .6 : 1) * (BRAKE_FADE ? lerpTable(BRAKE_FADE, av * 3.6) : 1) * Math.pow(c.b, H.brakeExp) * Math.sqrt(Math.max(.15, 1 - latUse * latUse)) : 0;
+  const aBrake = vf > .4 ? BRAKE_MAX * (c.grass ? .6 : 1) * wxGrip() * (BRAKE_FADE ? lerpTable(BRAKE_FADE, av * 3.6) : 1) * Math.pow(c.b, H.brakeExp) * Math.sqrt(Math.max(.15, 1 - latUse * latUse)) : 0;
   c.brakeF = aBrake / BRAKE_MAX;   // 軽く踏めば穏やか、強く踏めば最大9.0
   dec += aBrake;
   if (vf <= .4 && c.p < .02 && c.b > .05) vf = Math.max(vf - 5.5 * Math.min(1, c.b * 2) * dt, -9);   // バック
@@ -2233,9 +2298,19 @@ function updateCamera(dt) {
 /* =====================================================================
    スピード線・HUD
    ===================================================================== */
+let rainDrops = null;
 function updateFx(dt) {
   const w = fx.width, h = fx.height, kmh = Math.hypot(car.vx, car.vz) * 3.6;
   fxc.clearRect(0, 0, w, h);
+  if (weather === 'rain') {
+    if (!rainDrops) rainDrops = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), len: rnd(14, 28), sp: rnd(650, 950) }));
+    fxc.strokeStyle = 'rgba(200,215,230,.32)'; fxc.lineWidth = 1.2;
+    for (const d of rainDrops) {
+      d.y += d.sp * dt / h; if (d.y > 1.05) { d.y = -.05; d.x = Math.random(); }
+      const x = d.x * w, y = d.y * h;
+      fxc.beginPath(); fxc.moveTo(x, y); fxc.lineTo(x - 4, y + d.len); fxc.stroke();
+    }
+  }
   const a = clamp((kmh - 130) / 170, 0, 1) * (nitroOn ? 1.4 : .8);
   if (a > 0) {
     fxc.lineWidth = 1.4; const cx = w / 2, cy = h / 2, m = Math.min(w, h);
@@ -3163,7 +3238,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; } };
+window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; }, get weather() { return weather; }, set weather(v) { weather = v; updateSky(true); }, wxGrip };
 </script>
 </body>
 </html>

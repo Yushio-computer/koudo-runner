@@ -1494,7 +1494,7 @@ function refreshCourseUI() {
   $('courseDesc').textContent = COURSE_DESC[course];
 }
 function setCourse(name) {                              // コース切り替え: 道路・木・交通・自車位置を作り直して待機画面へ
-  damagedChunks.clear(); resetDestruction(); resetWear(); replayReset();
+  damagedChunks.clear(); resetDestruction(); resetWear(); replayReset(); gtrEnd();
   serenaTrafficN = 0; for (const t of traffic) t._useS = false;   // セレナ台数の上限カウントを、コース切り替えのたびに数え直す(ずれを防ぐ)
   course = name; resetRoad(); setLanes();
   for (const [, ch] of chunks) { scene.remove(ch.grp); ch.geos.forEach(g => g.dispose()); ch.inst.forEach(m => m.dispose()); }
@@ -1580,6 +1580,85 @@ function initTraffic() {
   for (const t of pubT) respawn(t, car.s + 30, car.s + 890);
 }
 function popup(text, cls) { const el = $('pop'); el.textContent = text; el.className = ''; void el.offsetWidth; el.className = 'show ' + (cls || ''); }
+
+/* =====================================================================
+   激レア: たまに荒い運転のGT-Rが現れる(公道と、都市の高架のみ)
+   ・数十秒おきに低確率で抽選(「激レア」を狙って、体感より控えめにしてある。多く出しがちなので注意)
+   ・出現中は急ブレーキ・急ハンドル(ドリフト風)を繰り返しながら自車を追い越していく
+   ・traffic配列とは別で1台だけ管理する、見た目だけの演出(衝突判定・近接スコアには関わらない)
+   ===================================================================== */
+let gtrEv = null;                // 出現中はオブジェクト、いない間はnull
+let gtrCheckT = rnd(30, 55);     // 次の抽選までの時間
+const GTR_SPAWN_P = .08;         // 抽選が来た時に実際に出す確率
+const gtrMesh = (() => { const m = makeCar({ ...VEHICLES.gtr.box, brakeable: true }); m.group.rotation.order = 'YXZ'; m.group.visible = false; scene.add(m.group); return m; })();
+function gtrTryStart() {
+  if (isCity()) {
+    if (Math.abs((car.y || 0) - HW_H) > 1.6) return;                  // 自車が高架の上にいる時だけ
+    const p = pathProject(DECK, car.x, car.z), lane = [DECK_W / 4, -DECK_W / 4][Math.floor(Math.random() * 2)];
+    gtrEv = { deck: true, u: p.s - rnd(40, 70), lane, targetD: lane, vs: rnd(30, 36), burstT: rnd(2, 4), burst: 0, kind: '', aliveT: 0, yawK: 0 };
+  } else {
+    const d = [1.8, 5.4][Math.floor(Math.random() * 2)];
+    gtrEv = { deck: false, s: car.s - rnd(50, 90), d, targetD: d, vs: rnd(34, 40), burstT: rnd(2, 4), burst: 0, kind: '', aliveT: 0, yawK: 0 };
+  }
+  gtrMesh.group.visible = true; gtrMesh.tailMat.color.setHex(0x8a1010);
+}
+function gtrEnd() { gtrEv = null; gtrMesh.group.visible = false; }
+function gtrStep(dt) {
+  if (!gtrEv) {
+    if (course === 'public' || isCity()) {
+      gtrCheckT -= dt;
+      if (gtrCheckT <= 0) { gtrCheckT = rnd(30, 55); if (Math.random() < GTR_SPAWN_P) gtrTryStart(); }
+    }
+    return;
+  }
+  if ((gtrEv.deck && !isCity()) || (!gtrEv.deck && course !== 'public')) { gtrEnd(); return; }   // コースが変わったら消す
+  gtrEv.aliveT += dt; gtrEv.burstT -= dt;
+  if (gtrEv.burstT <= 0 && gtrEv.burst <= 0) {                         // 次のバースト(急ブレーキ or 蛇行ドリフト)を選ぶ
+    gtrEv.kind = Math.random() < .45 ? 'brake' : 'drift';
+    if (gtrEv.kind === 'drift') {
+      gtrEv.burstDur = rnd(1.8, 2.6);                                  // 何度もハンドルを切れるだけの長さを確保
+      gtrEv.swerveBaseD = gtrEv.deck ? gtrEv.lane : gtrEv.d;
+      gtrEv.swerveAmp = gtrEv.deck ? rnd(2.2, 3.4) : rnd(2.0, 3.0);
+      gtrEv.swerveN = Math.round(rnd(4, 6));                           // このバーストで切り返す回数
+      gtrEv.swerveI = 0; gtrEv.swerveT = 0;
+    } else { gtrEv.burstDur = rnd(.6, 1.0); }
+    gtrEv.burst = gtrEv.burstDur; gtrEv.burstT = rnd(2, 3.5);
+  }
+  const cruiseV = gtrEv.deck ? 33 : 38;
+  let brk = false;
+  if (gtrEv.burst > 0) {
+    gtrEv.burst -= dt;
+    if (gtrEv.kind === 'brake') { gtrEv.vs = Math.max(gtrEv.vs - dt * 18, cruiseV * .4); brk = true; gtrEv.yawK *= Math.exp(-6 * dt); }
+    else {
+      gtrEv.vs = Math.max(gtrEv.vs - dt * 4, cruiseV * .5);
+      gtrEv.swerveT -= dt;
+      if (gtrEv.swerveT <= 0 && gtrEv.swerveI < gtrEv.swerveN) {       // 次の切り返し: 左右交互に、うおらぁっと急ハンドル
+        gtrEv.swerveI++; const side = gtrEv.swerveI % 2 ? 1 : -1;
+        gtrEv.targetD = gtrEv.swerveBaseD + side * gtrEv.swerveAmp;
+        gtrEv.yawK = side * rnd(.4, .55);
+        gtrEv.swerveT = gtrEv.burstDur / gtrEv.swerveN;
+      } else gtrEv.yawK *= Math.exp(-5 * dt);
+    }
+  } else {
+    gtrEv.yawK *= Math.exp(-6 * dt);
+    gtrEv.vs = Math.min(gtrEv.vs + dt * 5, cruiseV);
+  }
+  const chaseRate = (gtrEv.burst > 0 && gtrEv.kind === 'drift') ? 18 : 6;   // 蛇行中は車線追従をかなり速く(急ハンドル感)
+  const cur = gtrEv.deck ? gtrEv.lane : gtrEv.d, nd = cur + clamp(gtrEv.targetD - cur, -dt * chaseRate, dt * chaseRate);
+  if (gtrEv.deck) gtrEv.lane = nd; else gtrEv.d = nd;
+  let relS;
+  if (gtrEv.deck) {
+    gtrEv.u += gtrEv.vs * dt; const q = pathAt(DECK, gtrEv.u, gtrEv.lane);
+    gtrMesh.group.position.set(q.x, HW_H, q.z); gtrMesh.group.rotation.set(0, q.h + gtrEv.yawK, 0);
+    relS = gtrEv.u - pathProject(DECK, car.x, car.z).s; relS = ((relS + DECK.len / 2) % DECK.len + DECK.len) % DECK.len - DECK.len / 2;
+  } else {
+    gtrEv.s += gtrEv.vs * dt; const q = centerAt(gtrEv.s), x = q.x + Math.cos(q.h) * gtrEv.d, z = q.z - Math.sin(q.h) * gtrEv.d;
+    gtrMesh.group.position.set(x, q.y, z); gtrMesh.group.rotation.set(-Math.atan(q.sl || 0), q.h + gtrEv.yawK, 0);
+    relS = gtrEv.s - car.s;
+  }
+  gtrMesh.tailMat.color.setHex(brk ? 0xff2a2a : 0x8a1010);
+  if (gtrEv.aliveT > 20 || Math.abs(relS) > 260) gtrEnd();             // 出てから20秒、または自車から260m離れたら消える
+}
 
 /* =====================================================================
    レース(筑波サーキット): 全車一斉スタート、順位、3周でフィニッシュ
@@ -1673,6 +1752,7 @@ function curveSpeed(t) {                // カーブの手前から減速する(
 const _ccTmp = {};                      // stepTrafficで使い回すオブジェクト(毎フレーム・車の台数ぶん呼ばれるので、作りすぎを避ける)
 function stepTraffic(dt) {
   const c = car, active = state === 'play';
+  if (active) gtrStep(dt);
   // 貫通: ニトロ発動中は車をすり抜ける。ニトロが切れた瞬間に車と重なっていたら、抜けきるまで(最大2秒)貫通を続ける
   const wasOverlap = ghostOverlap; ghostOverlap = false;
   ghostHold = (ghost && !nitroOn && wasOverlap) ? ghostHold + dt : 0;
@@ -3281,7 +3361,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; }, get weather() { return weather; }, set weather(v) { weather = v; updateSky(true); }, wxGrip };
+window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; }, get weather() { return weather; }, set weather(v) { weather = v; updateSky(true); }, wxGrip, gtrTryStart, gtrEnd, get gtrEv() { return gtrEv; }, gtrMesh };
 </script>
 </body>
 </html>

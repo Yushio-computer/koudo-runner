@@ -2009,11 +2009,12 @@ function ppStep(dt) {                                                   // 毎�
     PP.steer += (cmdL - PP.steer) * Math.min(1, dt / .12);
   }
   // --- 縦: 設定速度・カーブ・前の車から、目標の加減速度(a_des)を決める
-  let vc = 1e9, needC = 0; const reach = Math.min(420, 30 + v * v / (2 * PP_DEC));
+  let vc = 1e9, needC = 0, bindA = 0, bindK = 0; const reach = Math.min(420, 30 + v * v / (2 * PP_DEC));
   for (let a = 0; a <= reach; a += 10) {
     const k = ctx.k(a); if (k <= 1e-4) continue;
     const vl = Math.sqrt(PP_ALAT / k);
-    vc = Math.min(vc, Math.sqrt(vl * vl + 2 * PP_DEC * Math.max(0, a - 6)));                                    // ふだんの、気持ちのいい減速で間に合う速さ
+    const vcA = Math.sqrt(vl * vl + 2 * PP_DEC * Math.max(0, a - 6));                                           // ふだんの、気持ちのいい減速で間に合う速さ
+    if (vcA < vc) { vc = vcA; bindA = a; bindK = k; }
     if (v > vl) needC = Math.max(needC, (v * v - vl * vl) / (2 * Math.max(a - 9, 3)));                          // 先のカーブの限界速度に、9m手前には収まっているという厳しめの余裕で合わせる。間に合わないぶんだけ強く減速(needC)。1つの式で、軽い減速からフルブレーキまで連続して強くなる(急に切り替わらない)
   }
   const vt = Math.min(ctx.kind === 'ramp' ? Math.max(PP.set, ctx.merge) : PP.set, vc);   // 合流支援: ランプの上では設定速度より、合流先の交通の速さを優先して加速
@@ -2025,12 +2026,13 @@ function ppStep(dt) {                                                   // 毎�
   PP.slowT = (nearLead && lead.v < PP.set * .82) ? (PP.slowT || 0) + dt : Math.max(0, (PP.slowT || 0) - dt * 2);   // 前の車に詰まって設定速度より明らかに遅い状態が続いたら「追い越しますか」の合図(安定して追従中はv≈lead.vになるので、自分の速度がlead.vを上回っているかは見ない)
   if (PP.slowT > 1.5 && (PP.canLeft || PP.canRight) && !PP.suggested) { PP.suggested = true; ppTone([660, 880], .1, .3, 'sine', .12); }
   else if (PP.slowT <= 0 || (!PP.canLeft && !PP.canRight)) PP.suggested = false;
+  let gap = 0, want = 0, vFollow = 0;
   if (lead) {
-    const gap = lead.gap, want = Math.max(PP_GAP_MIN, lead.v * 1.0);      // 前の車との車間(≒1.0秒ぶん)。前の車の速さを基準にする(自分の速さだと、詰めている間じわじわ目標が動いて手前で減速してしまう)。止まる直前は最低8m
+    gap = lead.gap; want = Math.max(PP_GAP_MIN, lead.v * 1.0);      // 前の車との車間(≒1.0秒ぶん)。前の車の速さを基準にする(自分の速さだと、詰めている間じわじわ目標が動いて手前で減速してしまう)。止まる直前は最低8m
     if (PP.leadId !== lead.id) { PP.leadId = lead.id; PP.leadV = lead.v; PP.aLead = 0; }                       // 前の車が変わったら、加速度の推定をやり直す
     PP.aLead += (clamp((lead.v - PP.leadV) / Math.max(dt, 1e-3), -40, 8) - PP.aLead) * Math.min(1, dt / .12); PP.leadV = lead.v;   // 前の車の加減速(急ブレーキを見つける)
     // 車間が目標より広ければ、前の車の速さより速く出してでも詰める(PP_DECで気持ちよく減速し、車間が目標になったところで前の車と同じ速さになる)。狭ければ、その逆でゆっくり開く
-    const dGap = gap - want, vFollow = dGap >= 0 ? Math.sqrt(Math.max(0, lead.v * lead.v + 2 * PP_DEC * dGap)) : Math.max(0, lead.v - Math.sqrt(2 * PP_DEC * -dGap));
+    const dGap = gap - want; vFollow = dGap >= 0 ? Math.sqrt(Math.max(0, lead.v * lead.v + 2 * PP_DEC * dGap)) : Math.max(0, lead.v - Math.sqrt(2 * PP_DEC * -dGap));
     aDes = Math.min(aDes, clamp(.5 * (vFollow - v), -3, PP_ACC));
     const rel = v - lead.v;
     let aNeed = rel > 0 ? -(rel * rel) / (2 * Math.max(gap - 4, .8)) : 0;                                     // 安全弁: 今の相対速度のまま詰まったら危ないので、常に効かせておく(前の車が止まりきった後もこれは切れない)
@@ -2039,10 +2041,22 @@ function ppStep(dt) {                                                   // 毎�
     if (aNeed < -.3) aDes = Math.min(aDes, aNeed);                                                            // ごくわずかに前の車より速いだけ(ガードが常時発動して全く近づけなくなる)は無視する
   }
   PP.logT = (PP.logT || 0) - dt;
-  if (PP.logT <= 0) {                                                    // ProPILOTが今何を考えて加減速を決めてるか、0.5秒おきにコンソールへ
+  if (PP.logT <= 0) {                                                    // ProPILOTが今何を考えて加減速を決めてるか、0.5秒おきにコンソールへ(実際に使ってる内部の値だけ。存在しないもの(横風など)は出さない)
     PP.logT = .5;
-    const leadTxt = lead ? ` | 前車 ${Math.round(lead.v * 3.6)}km/h 車間${lead.gap.toFixed(0)}m(目標${Math.max(PP_GAP_MIN, lead.v * 1.0).toFixed(0)}m)` : '';
-    console.log(`[ProPILOT] v=${Math.round(v * 3.6)}km/h set=${Math.round(PP.set * 3.6)}km/h カーブ限界=${Math.round(Math.min(vc, 999) * 3.6)}km/h needC=${needC.toFixed(2)} → aDes=${aDes.toFixed(2)}m/s²${leadTxt}`);
+    const jerk = (aDes - (PP.prevADes ?? aDes)) / .5; PP.prevADes = aDes;
+    const comfort = Math.abs(jerk) < 2 ? '快適' : Math.abs(jerk) < 5 ? 'やや急' : '急';
+    // ① SET・カーブ・前車のうち、どれが今の目標速度を決めてるか(一番遅いものに★)
+    const candSet = PP.set * 3.6, candCurve = Math.min(vc, 999) * 3.6, candLead = lead ? vFollow * 3.6 : Infinity;
+    const targetKmh = Math.min(candSet, candCurve, candLead);
+    const mk = (val, label, omitNum) => val <= targetKmh + 1e-6 ? `★${label}${omitNum ? '' : ':' + Math.round(val)}` : `${label}:${Math.round(val)}`;
+    const line1 = `[ProPILOT] 目標値: ${Math.round(targetKmh)}km/h [${mk(candSet, 'SET', true)} / ${mk(candCurve, 'カーブ')} / ${lead ? mk(candLead, '前車') : '前車:なし'}] jerk=${jerk.toFixed(2)}[${comfort}]`;
+    // ② 手前の道を10mおきにのぞき見て、どこが一番きついか
+    let minR = Infinity, minI = -1; const pts = [];
+    for (let i = 0; i < 4; i++) { const a = (i + 1) * 10, k = ctx.k(a), R = k > 1e-5 ? Math.round(1 / k) : 9999; if (R < minR) { minR = R; minI = i; } pts.push({ a, R }); }
+    const line2 = '先読み: ' + pts.map((p, i) => `[${p.a}m:R${p.R}${i === minI ? '(最急!)' : ''}]`).join(' ');
+    console.log(line1); console.log(line2);
+    // ③ 前の車との車間、実際と目標の差でどう動くか
+    if (lead) console.log(`車間: 現実${gap.toFixed(0)}m / 目標${want.toFixed(0)}m → [判定: ${gap >= want ? '加速して詰めてOK' : '詰まりすぎ! 離れて'}]${lead.id.base.truck ? ' (前車は大型)' : ''}`);
   }
   const aRaw = (v - PP.vPrev) / Math.max(dt, 1e-3); PP.vPrev = v; PP.aMeas += (aRaw - PP.aMeas) * Math.min(1, dt / .3);
   if (keys.up) { PP.accOvr = true; PP.thr = 1; PP.brk = 0; PP.u = c.p; return; } PP.accOvr = false;      // アクセルを踏んでいる間は運転手の操作(離すと設定速度へ戻る)

@@ -699,7 +699,7 @@ function loadCarModel(url, yaw, length, onLoad) {
    ・phys:      加速・ブレーキ・グリップ・回転半径・重心など(NORMALモードの標準値)
    ・powertrain: 'series'(シリーズ式ハイブリッド: バッテリー+発電エンジン) / 'ths'(トヨタの動力分割式: エンジンも駆動に参加) / 'ehev'(ホンダの2モーター式: モーター駆動主体+高速はエンジン直結) / 'ev'(電気自動車: 発電なし) / 'ice'(ガソリン車: 変速・回転数・エンジン音。バッテリーなし)
    ===================================================================== */
-// ★ ノア/ステップワゴン(ハイブリッド2車種)のスイッチ。false=無効(車種選択にも出ず、URLの ?car= でも呼び出せない)。使うときはこの1行を true にするだけ
+// ★ ノアのスイッチ。false=無効(車種選択にも出ず、URLの ?car= でも呼び出せない)。使うときはこの1行を true にするだけ。ステップワゴンは3Dモデルが届いたので常時有効
 const HYBRIDS_ENABLED = false;
 // ★ 車体ダメージ(ぶつかると車体が減り、0で「壊れてゲームオーバー」)のスイッチ。false=ダメージなし(ぶつかっても走り続けられ、車体ゲージも非表示)。戻すときはこの1行を true にするだけ。ガードレール・木が壊れる表現やコンボ切れは別で、そのまま残る
 const DAMAGE_ENABLED = false;
@@ -743,7 +743,12 @@ const VEHICLES = {
       hit: { off: 1.4, r: .95 }, cam: { dist: 6.4, h: 2.0, look: 1.0 }, eye: [-.42, 1.1, .05],
       dash: [1.55, .16, .42, 0, .95, .5], wheel: { r: .17, pos: [-.42, .98, .35], rot: -1.0 }, pillar: { dx: .74, y: 1.12, z: .55, h: .5, rot: -.7 }, flame: { x: .5, y: .42, z: -2.4 },
     },
-    model: null,                            // ← GLBが届いたら { url:'assets/…glb', yaw, length:4.7, hit, cam, eye, cockpit:{…}, tail:{…}, flameY } を書く(serenaの例を参照)
+    model: {                                // 3Dモデル(軽量化はセレナ運転用と同じ方法。運転用途だけなので対向車版は作っていない)
+      url: 'assets/gtr.glb', yaw: Math.PI / 2, length: 4.7,
+      hit: { off: 1.4, r: .95 }, cam: { dist: 6.4, h: 2.0, look: 1.0 }, eye: [-.42, 1.05, .05],
+      cockpit: { dash: [1.6, .25, .45, 0, .85, 1.5], wheel: { r: .18, pos: [-.4, .9, 1.05], rot: -1.15 }, pillar: { dx: .82, y: 1.2, z: 1.2, h: .55, rot: -.6 } },
+      tail: { x: .78, y: .95 }, flameY: .38,
+    },
   },
   noah: {                                   // トヨタ ノア ハイブリッド(90系・1.8L THS II・FF)。公式: 最小回転半径5.5m。実測(GPS参考): 0-60 4.1s / 0-100 9.76s / 0-180 37.2s、車重約1,630kg、システム出力140ps。これ以外(重心高・グリップ・制御のしきい値など)は推定。3Dモデルが届くまでは箱の仮モデル
     name: 'トヨタ ノア HV (THS II)', hybrid: true, ready: HYBRIDS_ENABLED,
@@ -770,7 +775,7 @@ const VEHICLES = {
     model: null,                            // ← GLBが届いたら serena の例のとおり書く
   },
   stepwgn: {                                // ホンダ ステップワゴン(6代目)e:HEV・FF。公式: モーター135kW/315N·m、2.0L直4、最小回転半径は基本5.4m・SPADA PREMIUM LINEなど一部グレードは5.7m(ここでは5.7m=SPADA想定)、車重はe:HEV SPADAで約1,840kg。実測(GPS計測などの条件付き参考値): 0-100 7秒台(ここでは7.5s)。これ以外(重心高・制御のしきい値・直結の回転数・0-60/0-160)は推定。3Dモデルが届くまでは箱の仮モデル
-    name: 'ホンダ ステップワゴン e:HEV', hybrid: true, ready: HYBRIDS_ENABLED,
+    name: 'ホンダ ステップワゴン e:HEV', hybrid: true, ready: true,
     powertrain: {
       type: 'ehev', battery0: .60, cyl: 4, idle: 950, max: 5500,       // 2モーター式。低〜中速はエンジンが発電してモーターが駆動、高速はエンジン直結(ロックアップ)
       chgOn: .38, chgOff: .56,
@@ -793,7 +798,44 @@ const VEHICLES = {
       hit: { off: 1.35, r: .94 }, cam: { dist: 6.5, h: 2.2, look: 1.2 }, eye: [-.4, 1.2, 0],
       dash: [1.5, .16, .42, 0, .95, .42], wheel: { r: .18, pos: [-.4, .96, .3], rot: -1.0 }, pillar: { dx: .72, y: 1.12, z: .5, h: .58, rot: -.7 }, flame: { x: .5, y: .42, z: -2.35 },
     },
-    model: null,
+    model: {                                // 3Dモデル(軽量化はセレナ運転用と同じ方法。運転用途だけなので対向車版は作っていない)
+      url: 'assets/stepwgn.glb', yaw: Math.PI / 2, length: 4.83,
+      hit: { off: 1.4, r: .95 }, cam: { dist: 7.8, h: 3.1, look: 1.5 }, eye: [-.4, 1.4, .5],
+      cockpit: { dash: [1.65, .3, .5, 0, .85, 1.5], wheel: { r: .19, pos: [-.4, 1.0, 1.1], rot: -1.15 }, pillar: { dx: .88, y: 1.4, z: 1.25, h: .62, rot: -.6 } },
+      tail: { x: .8, y: 1.0 }, flameY: .42,
+    },
+  },
+  is300h: {                                 // レクサス IS300h(XE30後期・F SPORT想定)。公式諸元: 全長4,715×全幅1,840×全高1,430mm・ホイールベース2,800mm・2.5L+モーターのハイブリッド(THS系・電気式CVT)。0-100km/hは公表値の約8.9秒を基準に加速表を作成。それ以外(重心高・グリップ・操作感)はユーザーの走行感の説明(FRらしい素直な向き・アンダーステアが出にくい・スライドが穏やかで扱いやすい・加速はリニアで息が長い)から推定
+    name: 'レクサス IS300h', ready: true,
+    powertrain: {
+      type: 'ths', battery0: .6, cyl: 4, idle: 1000, max: 5500,          // 電気式CVT(動力分割式)。低負荷はモーターのみ、踏み込むとエンジンが合流
+      chgOn: .42, chgOff: .58,
+      mCap: [[0, .58], [60, .50], [100, .38], [140, .28]],
+      engSpeed: 55, cruiseOn: 100, hold: 2.0,
+      rpmCurve: [[0, 1000], [.15, 1600], [.35, 2400], [.6, 3600], [.8, 4600], [1, 5500]],
+      coast: [[0, .3], [10, .45], [30, .6], [70, .5], [130, .38]], coastRamp: .35,
+    },
+    phys: {
+      ACC0: 4.1, VMAX: 55.5,
+      ACC_TABLE: [[0, 4.1], [30, 3.85], [50, 3.4], [70, 2.85], [90, 2.35], [100, 2.15], [120, 1.75], [140, 1.4], [160, 1.1], [180, .8], [190, .55], [200, 0]],
+      DRAG: .00075, COAST: 1.2, BRAKE_MAX: 10.0, MU_LAT: 1.08, WHEELBASE: 2.8, MIN_TURN_R: 5.5, TRACK: 1.57, CG_H: .50, FRONT_STATIC: .52, STEER_SF: STEER_SF_STD, UNDERSTEER: .20, ROLL_DEG_PER_G: 2.0, REAR_MIN: .32,
+    },
+    hnd: {                                  // FRらしく素直に向きが変わり、限界を超えても唐突にスピンしない(教科書的で練習向き)。急な一発回頭(limitRot)は持たせない
+      steerRate: 1.2, steerDecay: 30, yawResp: 11, steerExp: .92, knee: 6, driveLat: 1, accelShift: 1, downforce: 0, lowSpeedPush: 0, yawRearMargin: 2.8, tcb: .3, lowGrip: .92, trailBrake: .15, brakeLat: 1, limitRot: 0, rotDur: .35,
+      rollRate: 8, rollMax: 4.5, pitchGain: .0032, pitchFreq: 10, pitchZeta: .48, stopKick: .07,
+      thrRamp: .08, thrRelease: .10, thrLinear: true, coastRamp: .35,
+    },
+    box: {
+      color: 0xf2f2f0, w: 1.84, l: 4.715, h: .48, ch: .5, cl: 1.85, cz: -.2, wing: false, len: 4.715,
+      hit: { off: 1.3, r: .92 }, cam: { dist: 6.3, h: 2.0, look: 1.1 }, eye: [-.4, 1.05, 0],
+      dash: [1.5, .16, .42, 0, .9, .42], wheel: { r: .17, pos: [-.4, .93, .3], rot: -1.0 }, pillar: { dx: .72, y: 1.08, z: .5, h: .55, rot: -.7 }, flame: { x: .5, y: .4, z: -2.3 },
+    },
+    model: {                                // 3Dモデル(軽量化はセレナ運転用と同じ方法。運転用途だけなので対向車版は作っていない)
+      url: 'assets/is300h.glb', yaw: Math.PI / 2, length: 4.715,
+      hit: { off: 1.35, r: .93 }, cam: { dist: 6.6, h: 2.1, look: 1.1 }, eye: [-.4, 1.05, .1],
+      cockpit: { dash: [1.6, .25, .45, 0, .82, 1.48], wheel: { r: .18, pos: [-.4, .92, 1.05], rot: -1.15 }, pillar: { dx: .8, y: 1.15, z: 1.15, h: .55, rot: -.6 } },
+      tail: { x: .76, y: .95 }, flameY: .38,
+    },
   },
 };
 const RIGS = {};
@@ -1603,6 +1645,10 @@ function gtrTryStart() {
   gtrMesh.group.visible = true; gtrMesh.tailMat.color.setHex(0x8a1010);
 }
 function gtrEnd() { gtrEv = null; gtrMesh.group.visible = false; }
+function gtrSmoke(x, y, z, heading) {                                  // ドリフト中、後輪あたりからうっすら煙(プレイヤーのドリフト演出と同じ発想)
+  const Fx = Math.sin(heading), Fz = Math.cos(heading), Lx = Math.cos(heading), Lz = -Math.sin(heading);
+  for (const sx of [.8, -.8]) if (Math.random() < .55) emit(x - Fx * 2.1 + Lx * sx, y + .15, z - Fz * 2.1 + Lz * sx, rnd(-.6, .6), rnd(.3, 1.2), rnd(-.6, .6), rnd(.8, 1.3), 1.0, 3.2, 0xdddddd, false);
+}
 function gtrStep(dt) {
   if (!gtrEv) {
     if (course === 'public' || isCity()) {
@@ -1628,32 +1674,38 @@ function gtrStep(dt) {
   let brk = false;
   if (gtrEv.burst > 0) {
     gtrEv.burst -= dt;
-    if (gtrEv.kind === 'brake') { gtrEv.vs = Math.max(gtrEv.vs - dt * 18, cruiseV * .4); brk = true; gtrEv.yawK *= Math.exp(-6 * dt); }
+    if (gtrEv.kind === 'brake') { gtrEv.vs = Math.max(gtrEv.vs - dt * 18, cruiseV * .4); brk = true; }
     else {
       gtrEv.vs = Math.max(gtrEv.vs - dt * 4, cruiseV * .5);
       gtrEv.swerveT -= dt;
       if (gtrEv.swerveT <= 0 && gtrEv.swerveI < gtrEv.swerveN) {       // 次の切り返し: 左右交互に、うおらぁっと急ハンドル
         gtrEv.swerveI++; const side = gtrEv.swerveI % 2 ? 1 : -1;
         gtrEv.targetD = gtrEv.swerveBaseD + side * gtrEv.swerveAmp;
-        gtrEv.yawK = side * rnd(.4, .55);
         gtrEv.swerveT = gtrEv.burstDur / gtrEv.swerveN;
-      } else gtrEv.yawK *= Math.exp(-5 * dt);
+      }
     }
   } else {
-    gtrEv.yawK *= Math.exp(-6 * dt);
     gtrEv.vs = Math.min(gtrEv.vs + dt * 5, cruiseV);
   }
-  const chaseRate = (gtrEv.burst > 0 && gtrEv.kind === 'drift') ? 18 : 6;   // 蛇行中は車線追従をかなり速く(急ハンドル感)
-  const cur = gtrEv.deck ? gtrEv.lane : gtrEv.d, nd = cur + clamp(gtrEv.targetD - cur, -dt * chaseRate, dt * chaseRate);
+  const chaseRate = (gtrEv.burst > 0 && gtrEv.kind === 'drift') ? 20 : 6;   // 蛇行中は車線追従をかなり速く(急ハンドル感)
+  const cur = gtrEv.deck ? gtrEv.lane : gtrEv.d;
+  const nd = cur + clamp(gtrEv.targetD - cur, -dt * chaseRate, dt * chaseRate);
+  const latVel = (nd - cur) / Math.max(dt, 1e-3);                      // 実際に車体が横へ動いた速さ → ここから向き(ドリフト角)を逆算する。動かすだけでなく、ちゃんと「滑ってる向き」で描く
   if (gtrEv.deck) gtrEv.lane = nd; else gtrEv.d = nd;
+  const slipT = clamp(Math.atan2(latVel, Math.max(gtrEv.vs, 8)), -.62, .62);
+  gtrEv.yawK += (slipT - gtrEv.yawK) * Math.min(1, dt * 9);            // 車体の向きは実際の滑り角へなめらかに追従(スクリプトされた首振りではなく、動きから逆算)
+  gtrEv.roll = clamp(-gtrEv.yawK * .3, -.2, .2);
+  const sliding = Math.abs(latVel) > 1.3;
   let relS;
   if (gtrEv.deck) {
-    gtrEv.u += gtrEv.vs * dt; const q = pathAt(DECK, gtrEv.u, gtrEv.lane);
-    gtrMesh.group.position.set(q.x, HW_H, q.z); gtrMesh.group.rotation.set(0, q.h + gtrEv.yawK, 0);
+    gtrEv.u += gtrEv.vs * dt; const q = pathAt(DECK, gtrEv.u, gtrEv.lane), hed = q.h + gtrEv.yawK;
+    gtrMesh.group.position.set(q.x, HW_H, q.z); gtrMesh.group.rotation.set(0, hed, gtrEv.roll);
+    if (sliding) gtrSmoke(q.x, HW_H, q.z, hed);
     relS = gtrEv.u - pathProject(DECK, car.x, car.z).s; relS = ((relS + DECK.len / 2) % DECK.len + DECK.len) % DECK.len - DECK.len / 2;
   } else {
-    gtrEv.s += gtrEv.vs * dt; const q = centerAt(gtrEv.s), x = q.x + Math.cos(q.h) * gtrEv.d, z = q.z - Math.sin(q.h) * gtrEv.d;
-    gtrMesh.group.position.set(x, q.y, z); gtrMesh.group.rotation.set(-Math.atan(q.sl || 0), q.h + gtrEv.yawK, 0);
+    gtrEv.s += gtrEv.vs * dt; const q = centerAt(gtrEv.s), x = q.x + Math.cos(q.h) * gtrEv.d, z = q.z - Math.sin(q.h) * gtrEv.d, hed = q.h + gtrEv.yawK;
+    gtrMesh.group.position.set(x, q.y, z); gtrMesh.group.rotation.set(-Math.atan(q.sl || 0), hed, gtrEv.roll);
+    if (sliding) gtrSmoke(x, q.y, z, hed);
     relS = gtrEv.s - car.s;
   }
   gtrMesh.tailMat.color.setHex(brk ? 0xff2a2a : 0x8a1010);
@@ -3333,7 +3385,7 @@ cityBuildGraph();
    ===================================================================== */
 { // URLに ?car=(車のID) のように付けると、準備中の車(ready:false)も選べる(動作確認用)
   const q0 = new URLSearchParams(location.search).get('car');
-  const q = q0 && VEHICLES[q0] && (!VEHICLES[q0].hybrid || HYBRIDS_ENABLED) ? q0 : null;   // ノア/ステップワゴンはスイッチがfalseの間は呼び出せない
+  const q = q0 && VEHICLES[q0] && (!VEHICLES[q0].hybrid || HYBRIDS_ENABLED || VEHICLES[q0].ready) ? q0 : null;   // ノアはスイッチがfalseの間は呼び出せない(ステップワゴンはready:trueなので対象外)
   if (q) VEHICLES[q].ready = true;
   setVehicle(q || 'serena', false);
 }

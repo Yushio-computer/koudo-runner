@@ -717,7 +717,7 @@ const VEHICLES = {
     model: {                                // 3Dモデル。yaw: モデルの前方向を+Zに合わせる回転、length: 全長(m)に拡縮
       url: 'assets/serena_player.glb', yaw: Math.PI / 2, length: 4.7,
       hit: { off: 1.5, r: .925 }, cam: { dist: 7.6, h: 3.0, look: 1.5 }, eye: [-.42, 1.32, .55],
-      cockpit: { dash: [1.7, .3, .5, 0, .8, 1.55], wheel: { r: .19, pos: [-.42, .98, 1.15], rot: -1.15 }, pillar: { dx: .9, y: 1.35, z: 1.3, h: .6, rot: -.6 } },
+      cockpit: { style: 'serena', wheel: { r: .185, pos: [-.42, .97, 1.12], rot: -.5 } },
       tail: { x: .78, y: 1.0 }, flameY: .4,
     },
   },
@@ -838,6 +838,117 @@ const VEHICLES = {
     },
   },
 };
+/* =====================================================================
+   セレナの運転席(一人称視点): 参考写真に合わせた内装。横長のダッシュ・運転席前の12.3型メーターと中央のナビ(どちらも実際の走行状態に連動して描く)・
+   Nissanエンブレム付きのフラットボトム・ハンドル・太いAピラー・ドアミラー・ルームミラー。右ハンドル(運転席は車の右=-X側)。
+   ===================================================================== */
+function buildSerenaCockpit(cp, ck, eye) {
+  const mTop = new THREE.MeshLambertMaterial({ color: 0x5a5b60 }), mLow = new THREE.MeshLambertMaterial({ color: 0x35363a }), mPillar = new THREE.MeshLambertMaterial({ color: 0x3a3b3f }), mLeather = new THREE.MeshLambertMaterial({ color: 0x151516 });
+  const mTrim = new THREE.MeshStandardMaterial({ color: 0xb4b7bc, metalness: .85, roughness: .38 }), mGloss = new THREE.MeshStandardMaterial({ color: 0x050506, roughness: .18, metalness: .35 });
+  const add = o => (cp.add(o), o);
+  const up = new THREE.Vector3(0, 1, 0);
+  const beam = (a, b, w, t, mat) => { const A = new THREE.Vector3(...a), d = new THREE.Vector3(...b).sub(A), m = new THREE.Mesh(new THREE.BoxGeometry(w, d.length(), t), mat); m.position.copy(A).addScaledVector(d, .5); m.quaternion.setFromUnitVectors(up, d.normalize()); return add(m); };
+  const faceEye = (m, k = 1) => { const n = new THREE.Vector3(eye[0] - m.position.x, eye[1] - .05 - m.position.y, eye[2] - m.position.z).normalize(); m.rotation.order = 'YXZ'; m.rotation.y = Math.PI - Math.atan2(n.x, -n.z) * k; m.rotation.x = -Math.asin(n.y); return m; };   // 画面を運転席の目の方へ向ける(kは横方向を向ける度合い)
+  // ダッシュ: 上面+運転席側に向いた面+銀のトリム
+  add(box(1.74, .07, .62, mTop, 0, .985, 1.47));
+  add(box(1.74, .36, .05, mLow, 0, .8, 1.165));
+  add(box(1.7, .028, .018, mTrim, 0, .955, 1.135));
+  add(box(1.7, .02, .018, mTrim, 0, .9, 1.135));
+  // ステアリングコラムのカバー
+  add(box(.11, .1, .22, mLow, ck.wheel.pos[0], .84, 1.26));
+  // 黒いガラスの帯(ナビとメーターをつなぐ)
+  add(box(.9, .17, .03, mGloss, -.2, 1.125, 1.5));
+  // 画面(キャンバスに描く)
+  const mk = (w, h, pw, ph, x, y, z, k) => {
+    const cv = document.createElement('canvas'); cv.width = pw; cv.height = ph;
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+    m.position.set(x, y, z); faceEye(m, k); add(m); return { g: cv.getContext('2d'), tex, W: pw, H: ph };
+  };
+  const meter = mk(.30, .118, 640, 250, ck.wheel.pos[0], 1.125, 1.392, 1);
+  const nav = mk(.31, .122, 640, 250, .0, 1.125, 1.392, .6);
+  // ハンドル(フラットボトム): ピボットの中は顔が+Zの平面。回転はゲーム側が pivot.rotation.z を動かす
+  const w2 = new THREE.Group(); w2.position.set(...ck.wheel.pos); w2.rotation.x = ck.wheel.rot;
+  const R = ck.wheel.r, gap = .62;                                   // 下を切り落とした輪(gap=切り落とす角度の半分)
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R, .022, 10, 40, Math.PI * 2 - gap * 2), mLeather); rim.rotation.z = -Math.PI / 2 + gap; w2.add(rim);
+  const flat = new THREE.Mesh(new THREE.CylinderGeometry(.022, .022, 2 * R * Math.sin(gap), 10), mLeather); flat.rotation.z = Math.PI / 2; flat.position.y = -R * Math.cos(gap); w2.add(flat);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(.055, .06, .045, 20), mLeather); hub.rotation.x = Math.PI / 2; w2.add(hub);
+  const emb = new THREE.Mesh(new THREE.TorusGeometry(.03, .004, 6, 24), mTrim); emb.position.z = -.024; w2.add(emb);
+  w2.add(box(.06, .008, .006, mTrim, 0, 0, -.026));                                    // エンブレムの横棒
+  for (const sx of [1, -1]) {
+    w2.add(box(R * .78, .036, .026, mLeather, sx * R * .45, -.005, 0));                // 左右のスポーク
+    const pad = box(.075, .06, .014, mGloss, sx * .105, .0, -.018); w2.add(pad);         // スイッチパッド
+    for (let i = 0; i < 3; i++) w2.add(box(.012, .012, .006, mTrim, sx * .105 + (i - 1) * .02, .012 - (i % 2) * .02, -.027));
+  }
+  w2.add(box(.034, .07, .026, mLeather, 0, -.085, 0));                                  // 下のスポーク
+  const pp = box(.014, .014, .006, new THREE.MeshBasicMaterial({ color: 0x35a4ff }), .13, -.022, -.028); w2.add(pp);   // ProPILOTスイッチの青
+  add(w2);
+  // Aピラー・ルーフ側・ドアミラー・ルームミラー
+  beam([-.88, 1.0, 1.7], [-.76, 1.92, .85], .08, .07, mPillar); beam([.88, 1.0, 1.7], [.76, 1.92, .85], .08, .07, mPillar);
+  for (const sx of [1, -1]) { add(box(.1, .05, 1.5, mPillar, sx * .9, .985, .95)); add(box(.05, .1, .16, mPillar, sx * 1.03, 1.08, 1.25)); }
+  add(box(.22, .055, .03, mLeather, 0, 1.6, 1.3)); beam([0, 1.6, 1.3], [0, 1.74, 1.24], .02, .02, mLeather);
+  // 中身: 実際の走行状態から描く(視点が運転席のときだけ、約15Hzで更新)
+  let acc = 1;
+  const arc = (g, cx, cy, r, a0, a1, w, col) => { g.beginPath(); g.arc(cx, cy, r, a0, a1); g.lineWidth = w; g.strokeStyle = col; g.lineCap = 'round'; g.stroke(); };
+  const A0 = Math.PI * .75, SW = Math.PI * 1.5;
+  function drawMeter(st) {
+    const { g, W, H } = meter;
+    g.fillStyle = '#04050a'; g.fillRect(0, 0, W, H);
+    const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(60,90,140,.18)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    // 右: 速度計
+    let cx = 506, cy = 128, r = 98;
+    arc(g, cx, cy, r, A0, A0 + SW, 9, '#1a202c'); const f = clamp(st.kmh / 180, 0, 1); if (f > .004) arc(g, cx, cy, r, A0, A0 + SW * f, 9, '#47c6ff');
+    g.fillStyle = '#8791a3'; g.font = 'bold 15px sans-serif';
+    for (let v = 0; v <= 180; v += 20) { const a = A0 + SW * v / 180; g.fillText(String(v), cx + Math.cos(a) * (r - 26), cy + Math.sin(a) * (r - 26)); }
+    g.fillStyle = '#fff'; g.font = 'bold 76px sans-serif'; g.fillText(String(Math.round(st.kmh)), cx, cy - 4);
+    g.fillStyle = '#9aa4b8'; g.font = '19px sans-serif'; g.fillText('km/h', cx, cy + 48);
+    // 左: パワー(アクセルの出力)と回生、中央にシフト
+    cx = 134;
+    arc(g, cx, cy, r, A0, A0 + SW, 9, '#1a202c'); if (st.power > .004) arc(g, cx, cy, r, A0, A0 + SW * st.power, 9, '#47c6ff');
+    if (st.regen) arc(g, cx, cy, r - 14, A0, A0 + SW * .12, 6, '#5fe0a0');
+    g.fillStyle = '#fff'; g.font = 'bold 74px sans-serif'; g.fillText(st.gear, cx, cy - 6);
+    g.fillStyle = '#9aa4b8'; g.font = '16px sans-serif'; g.fillText('POWER', cx, cy + 46);
+    g.fillStyle = st.batt > .3 ? '#5fd4a0' : st.batt > .12 ? '#fc4' : '#f55'; g.fillRect(cx - 40, cy + 66, 80 * st.batt, 7); g.strokeStyle = '#4a5468'; g.lineWidth = 1.5; g.strokeRect(cx - 40, cy + 66, 80, 7);
+    // 中央: 時刻・クルマ(ProPILOT作動中は緑)・走行距離
+    cx = 320;
+    g.fillStyle = '#c9d0de'; g.font = '20px sans-serif'; g.fillText(st.clock, cx, 30);
+    const on = st.pp === 'on', col = on ? '#3ee08a' : st.pp === 'search' ? '#e8edf7' : '#6b7486';
+    g.strokeStyle = col; g.lineWidth = 4; g.setLineDash(on ? [] : [10, 8]);
+    for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(cx + sx * 46, 60); g.lineTo(cx + sx * 46, 195); g.stroke(); }
+    g.setLineDash([]); g.fillStyle = col; g.beginPath(); g.roundRect(cx - 22, 92, 44, 78, 12); g.fill();
+    g.fillStyle = '#04050a'; g.fillRect(cx - 14, 104, 28, 14); g.fillRect(cx - 14, 146, 28, 10);
+    g.fillStyle = on ? '#3ee08a' : '#8d97aa'; g.font = '15px sans-serif'; g.fillText(on ? 'ProPILOT  ' + st.setKmh : st.mode, cx, 188);
+    g.fillStyle = '#8d97aa'; g.fillText(st.trip + ' km', cx, 226);
+    meter.tex.needsUpdate = true;
+  }
+  function drawNav(st) {
+    const { g, W, H } = nav;
+    g.fillStyle = '#ece7d6'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#a9d2ee'; g.beginPath(); g.moveTo(W, 0); g.lineTo(W, H); g.lineTo(380, H); g.bezierCurveTo(430, 170, 360, 120, 420, 60); g.bezierCurveTo(440, 30, 470, 10, 500, 0); g.fill();   // 海
+    g.fillStyle = '#cfe3b4'; g.fillRect(40, 20, 130, 70); g.fillRect(200, 150, 110, 80);                                                                                                     // 公園
+    const off = (st.dist * .18) % 80;                                                                                                                                                       // 走った分だけ地図が手前へ流れる
+    g.strokeStyle = '#fff'; g.lineWidth = 7;
+    for (let y = -80 + off; y < H + 80; y += 80) { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y + 16); g.stroke(); }
+    for (const x of [90, 250, 560]) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x - 14, H); g.stroke(); }
+    g.strokeStyle = '#f2c14e'; g.lineWidth = 11; g.beginPath(); g.moveTo(330, H + 20); g.lineTo(326, -20); g.stroke();                                                                      // 走っている道
+    g.strokeStyle = '#2f6bff'; g.lineWidth = 6; g.beginPath(); g.moveTo(330, H - 40); g.lineTo(327, -20); g.stroke();                                                                       // 経路
+    g.fillStyle = '#2f6bff'; g.beginPath(); g.moveTo(330, 138); g.lineTo(346, 178); g.lineTo(330, 168); g.lineTo(314, 178); g.closePath(); g.fill();                                          // 自車マーク
+    g.strokeStyle = '#fff'; g.lineWidth = 2.5; g.stroke();
+    g.fillStyle = 'rgba(20,24,34,.82)'; g.fillRect(12, 12, 150, 52); g.fillStyle = '#fff'; g.font = 'bold 22px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(st.kmh + ' km/h', 24, 38);
+    g.fillStyle = 'rgba(20,24,34,.82)'; for (let i = 0; i < 4; i++) { g.beginPath(); g.arc(W - 28, 36 + i * 52, 18, 0, 7); g.fill(); }
+    nav.tex.needsUpdate = true;
+  }
+  cp.userData.steerPivot = w2;
+  cp.userData.tick = dt => {
+    acc += dt; if (acc < .066) return; acc = 0;
+    const kmh = Math.hypot(car.vx, car.vz) * 3.6, rev = Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5, hr = todHours();
+    drawMeter({ kmh, power: car.out || 0, regen: !!car.regenOn, batt: car.batt, gear: rev ? 'R' : VEH.powertrain.coastB ? decelSel : 'D', pp: PP.state, setKmh: Math.round(PP.set * 3.6), mode: M.name + (ePedal ? ' e-Pedal' : ''), trip: (dist / 1000).toFixed(1), clock: String(Math.floor(hr)).padStart(2, '0') + ':' + String(Math.floor(hr % 1 * 60)).padStart(2, '0') });
+    drawNav({ kmh: Math.round(kmh), dist });
+  };
+  drawMeter({ kmh: 0, power: 0, regen: false, batt: .65, gear: 'D', pp: 'off', setKmh: 0, mode: '', trip: '0.0', clock: '--:--' }); drawNav({ kmh: 0, dist: 0 });
+  return w2;
+}
 const RIGS = {};
 function buildRig(id) {                     // 車1台ぶんの見た目(箱の仮モデル+運転席の内装+ニトロ炎、GLBがあれば読み込んで差し替え)を組み立てる
   const v = VEHICLES[id], b = v.box;
@@ -861,11 +972,14 @@ function buildRig(id) {                     // 車1台ぶんの見た目(箱の�
   const cp = new THREE.Group(); cp.visible = false; group.add(cp);
   const m = v.model;
   if (m) {
-    const ck = m.cockpit;                                      // GLBの車の運転席視点用の内装(箱で代用)
-    cp.add(box(ck.dash[0], ck.dash[1], ck.dash[2], DARK, ck.dash[3], ck.dash[4], ck.dash[5]));
-    const w2 = new THREE.Group(); w2.position.set(...ck.wheel.pos); w2.rotation.x = ck.wheel.rot;
-    w2.add(new THREE.Mesh(new THREE.TorusGeometry(ck.wheel.r, .024, 8, 20), DARK)); cp.add(w2); player.steerWheelModel = w2;
-    for (const sx of [1, -1]) { const p = box(.06, ck.pillar.h, .06, DARK, sx * ck.pillar.dx, ck.pillar.y, ck.pillar.z); p.rotation.x = ck.pillar.rot; cp.add(p); }
+    const ck = m.cockpit;                                      // GLBの車の運転席視点用の内装(箱で代用。style:'serena' だけは参考写真に合わせた作り込み版)
+    if (ck.style === 'serena') player.steerWheelModel = buildSerenaCockpit(cp, ck, m.eye);
+    else {
+      cp.add(box(ck.dash[0], ck.dash[1], ck.dash[2], DARK, ck.dash[3], ck.dash[4], ck.dash[5]));
+      const w2 = new THREE.Group(); w2.position.set(...ck.wheel.pos); w2.rotation.x = ck.wheel.rot;
+      w2.add(new THREE.Mesh(new THREE.TorusGeometry(ck.wheel.r, .024, 8, 20), DARK)); cp.add(w2); player.steerWheelModel = w2;
+      for (const sx of [1, -1]) { const p = box(.06, ck.pillar.h, .06, DARK, sx * ck.pillar.dx, ck.pillar.y, ck.pillar.z); p.rotation.x = ck.pillar.rot; cp.add(p); }
+    }
     loadCarModel(m.url, m.yaw, m.length, holder => {
       group.add(holder); player.model = holder;
       player.mats = []; holder.traverse(o => { if (o.isMesh) player.mats.push(o.material); }); player.ghostA = 1;
@@ -1631,20 +1745,64 @@ function popup(text, cls) { const el = $('pop'); el.textContent = text; el.class
    ===================================================================== */
 let gtrEv = null;                // 出現中はオブジェクト、いない間はnull
 let gtrCheckT = rnd(30, 55);     // 次の抽選までの時間
-const GTR_SPAWN_P = .08;         // 抽選が来た時に実際に出す確率
+const GTR_SPAWN_P = .12;         // 抽選が来た時に実際に出す確率(.08→.12。平均 約9分に1回 → 約6分に1回)
 const gtrMesh = (() => { const m = makeCar({ ...VEHICLES.gtr.box, brakeable: true }); m.group.rotation.order = 'YXZ'; m.group.visible = false; scene.add(m.group); return m; })();
 function gtrTryStart() {
   if (isCity()) {
     if (Math.abs((car.y || 0) - HW_H) > 1.6) return;                  // 自車が高架の上にいる時だけ
     const p = pathProject(DECK, car.x, car.z), lane = [DECK_W / 4, -DECK_W / 4][Math.floor(Math.random() * 2)];
-    gtrEv = { deck: true, u: p.s - rnd(40, 70), lane, targetD: lane, vs: rnd(30, 36), burstT: rnd(2, 4), burst: 0, kind: '', aliveT: 0, yawK: 0 };
+    gtrEv = { deck: true, st: gtrNewState(lane, rnd(30, 36)), burstT: rnd(2, 4), burst: 0, kind: '', aliveT: 0 }; gtrEv.st.s = p.s - rnd(40, 70);
   } else {
     const d = [1.8, 5.4][Math.floor(Math.random() * 2)];
-    gtrEv = { deck: false, s: car.s - rnd(50, 90), d, targetD: d, vs: rnd(34, 40), burstT: rnd(2, 4), burst: 0, kind: '', aliveT: 0, yawK: 0 };
+    gtrEv = { deck: false, st: gtrNewState(d, rnd(34, 40)), burstT: rnd(2, 4), burst: 0, kind: '', aliveT: 0 }; gtrEv.st.s = car.s - rnd(50, 90);
   }
   gtrMesh.group.visible = true; gtrMesh.tailMat.color.setHex(0x8a1010);
 }
 function gtrEnd() { gtrEv = null; gtrMesh.group.visible = false; }
+/* GT-Rの運転: 位置を直接動かさず、車体の力学(自転車モデル+タイヤの限界)でステアとペダルの結果として動かす。
+   ドライバー(gtrDrive)がステア・アクセル・ブレーキを操作し、限界を超えた分は本当に滑る。 */
+const GTR_M = 1720, GTR_IZ = 2900, GTR_LA = 1.25, GTR_LB = 1.53, GTR_L = 2.78, GTR_MU = 1.15, GTR_H = .46;
+function gtrTireFy(alpha, D) { return -D * Math.sin(1.4 * Math.atan(12 * alpha)); }      // 限界(約10°)を超えると力が落ちる=滑る
+function gtrNewState(d, v) { return { s: 0, d, v, vy: 0, r: 0, psi: 0, ax: 0, ay: 0, slipR: 0, dT: d, steer: 0, thr: 0, brk: 0 }; }
+function gtrPhys(e, dt, steer, thr, brk) {
+  const n = Math.max(1, Math.ceil(dt / .01)), h = dt / n;
+  for (let i = 0; i < n; i++) {
+    const v = Math.max(e.v, 5);
+    const tr = clamp(e.ax, -9, 6) * GTR_M * GTR_H / GTR_L;                                // 加減速で前後の荷重が動く
+    const Fzf = Math.max(GTR_M * 9.8 * GTR_LB / GTR_L - tr, 2500), Fzr = Math.max(GTR_M * 9.8 * GTR_LA / GTR_L + tr, 2500);
+    const Fd = thr * GTR_M * 7.5 * Math.max(0, 1 - e.v / 70), Fb = brk * GTR_M * 10.5, rb = .35;
+    const Fxf = Fd * .4 - Fb * (1 - rb), Fxr = Fd * .6 - Fb * rb;                          // 駆動・制動に使ったぶん、横の力に回せる余力が減る
+    const Df = Math.max(Math.sqrt(Math.max(0, (GTR_MU * Fzf) ** 2 - Fxf * Fxf)), .3 * GTR_MU * Fzf);
+    const Dr = Math.max(Math.sqrt(Math.max(0, (GTR_MU * Fzr) ** 2 - Fxr * Fxr)), .3 * GTR_MU * Fzr);
+    const af = Math.atan2(e.vy + GTR_LA * e.r, v) - steer, ar = Math.atan2(e.vy - GTR_LB * e.r, v);
+    const Fyf = gtrTireFy(af, Df), Fyr = gtrTireFy(ar, Dr), cs = Math.cos(steer);
+    e.ay = (Fyf * cs + Fyr) / GTR_M;
+    e.vy += (e.ay - e.v * e.r) * h;
+    e.r += ((GTR_LA * Fyf * cs - GTR_LB * Fyr) / GTR_IZ) * h;
+    const ax = (Fd - Fb) / GTR_M - .0004 * e.v * e.v;
+    e.v = Math.max(3, e.v + (ax + e.r * e.vy) * h);
+    e.ax += (ax - e.ax) * Math.min(1, h * 8); e.slipR = ar;
+  }
+}
+function gtrDrive(e, dt, kappa, mode, cruiseV) {                                          // ドライバー: 行きたい横位置 e.dT へ向けてステア・ペダルを決める
+  const agg = mode === 'drift', cosP = Math.cos(e.psi), sinP = Math.sin(e.psi);
+  const sdot = (e.v * cosP - e.vy * sinP) / Math.max(.3, 1 - kappa * e.d), ddot = e.v * sinP + e.vy * cosP;
+  const pm = agg ? .5 : .2, psiDes = clamp((e.dT - e.d) * (agg ? 3.4 : 1) / e.v - ddot * (agg ? .018 : .03), -pm, pm);   // 横位置の誤差から「向けたい向き」を決める(横に速く動いているときは手前から戻す)
+  const rDes = clamp((agg ? 4.5 : 3) * (psiDes - e.psi), agg ? -1.2 : -.4, agg ? 1.2 : .4) + kappa * sdot;   // 欲しいヨーレート
+  let steer = clamp(GTR_L * rDes / e.v + .16 * (rDes - e.r), -.4, .4);
+  const k = clamp((Math.abs(e.slipR) - .12) / .12, 0, 1);                                  // お尻が限界を越えて流れ出したら、カウンターステア(前輪を進行方向へ向ける)
+  if (k > 0) steer = steer * (1 - k) + clamp(Math.atan2(e.vy + GTR_LA * e.r, Math.max(e.v, 5)), -.4, .4) * k;
+  const dSteer = 2.2 * dt; steer = clamp(steer, e.steer - dSteer, e.steer + dSteer);        // ハンドルを切る速さにも限界がある
+  let thr = 0, brk = 0;
+  if (mode === 'brake') brk = .95;
+  else {
+    const err = cruiseV - e.v; thr = clamp(err * .5, 0, 1); brk = clamp(-err * .25, 0, .4);
+    if (agg) thr = Math.max(thr, .45) * (1 - .8 * k);                                       // 蛇行中はパワーをかけ続ける(流れたら緩める)
+  }
+  gtrPhys(e, dt, steer, thr, brk);
+  e.s += sdot * dt; e.d += ddot * dt; e.psi += (e.r - kappa * sdot) * dt;
+  e.steer = steer; e.thr = thr; e.brk = brk;
+}
 function gtrSmoke(x, y, z, heading) {                                  // ドリフト中、後輪あたりからうっすら煙(プレイヤーのドリフト演出と同じ発想)
   const Fx = Math.sin(heading), Fz = Math.cos(heading), Lx = Math.cos(heading), Lz = -Math.sin(heading);
   for (const sx of [.8, -.8]) if (Math.random() < .55) emit(x - Fx * 2.1 + Lx * sx, y + .15, z - Fz * 2.1 + Lz * sx, rnd(-.6, .6), rnd(.3, 1.2), rnd(-.6, .6), rnd(.8, 1.3), 1.0, 3.2, 0xdddddd, false);
@@ -1658,58 +1816,52 @@ function gtrStep(dt) {
     return;
   }
   if ((gtrEv.deck && !isCity()) || (!gtrEv.deck && course !== 'public')) { gtrEnd(); return; }   // コースが変わったら消す
-  gtrEv.aliveT += dt; gtrEv.burstT -= dt;
-  if (gtrEv.burstT <= 0 && gtrEv.burst <= 0) {                         // 次のバースト(急ブレーキ or 蛇行ドリフト)を選ぶ
-    gtrEv.kind = Math.random() < .45 ? 'brake' : 'drift';
-    if (gtrEv.kind === 'drift') {
-      gtrEv.burstDur = rnd(1.8, 2.6);                                  // 何度もハンドルを切れるだけの長さを確保
-      gtrEv.swerveBaseD = gtrEv.deck ? gtrEv.lane : gtrEv.d;
-      gtrEv.swerveAmp = gtrEv.deck ? rnd(2.2, 3.4) : rnd(2.0, 3.0);
-      gtrEv.swerveN = Math.round(rnd(4, 6));                           // このバーストで切り返す回数
-      gtrEv.swerveI = 0; gtrEv.swerveT = 0;
-    } else { gtrEv.burstDur = rnd(.6, 1.0); }
-    gtrEv.burst = gtrEv.burstDur; gtrEv.burstT = rnd(2, 3.5);
+  const E = gtrEv, st = E.st;
+  E.aliveT += dt; E.burstT -= dt;
+  if (E.burstT <= 0 && E.burst <= 0) {                                 // 次のバースト(急ブレーキ or 蛇行)を選ぶ
+    E.kind = Math.random() < .45 ? 'brake' : 'drift';
+    if (E.kind === 'drift') {
+      E.burstDur = rnd(2.6, 3.6);
+      E.swerveBaseD = E.deck ? (st.d > 0 ? DECK_W / 4 : -DECK_W / 4) : (st.d < 3.6 ? 1.8 : 5.4);   // 蛇行の中心は今いる車線
+      E.swerveAmp = E.deck ? rnd(2.2, 3.0) : rnd(2.2, 3.2);
+      E.swerveN = Math.round(rnd(3, 5)); E.swerveI = 0; E.swerveT = 0;
+    } else { E.burstDur = rnd(.6, 1.0); }
+    E.burst = E.burstDur; E.burstT = rnd(2, 3.5);
   }
-  const cruiseV = gtrEv.deck ? 33 : 38;
-  let brk = false;
-  if (gtrEv.burst > 0) {
-    gtrEv.burst -= dt;
-    if (gtrEv.kind === 'brake') { gtrEv.vs = Math.max(gtrEv.vs - dt * 18, cruiseV * .4); brk = true; }
+  const cruiseV = E.deck ? 33 : 38;
+  let mode = 'cruise';
+  if (E.burst > 0) {
+    E.burst -= dt;
+    if (E.kind === 'brake') mode = 'brake';
     else {
-      gtrEv.vs = Math.max(gtrEv.vs - dt * 4, cruiseV * .5);
-      gtrEv.swerveT -= dt;
-      if (gtrEv.swerveT <= 0 && gtrEv.swerveI < gtrEv.swerveN) {       // 次の切り返し: 左右交互に、うおらぁっと急ハンドル
-        gtrEv.swerveI++; const side = gtrEv.swerveI % 2 ? 1 : -1;
-        gtrEv.targetD = gtrEv.swerveBaseD + side * gtrEv.swerveAmp;
-        gtrEv.swerveT = gtrEv.burstDur / gtrEv.swerveN;
+      mode = 'drift';
+      E.swerveT -= dt;
+      if (E.swerveT <= 0 && E.swerveI < E.swerveN) {                   // 次の切り返し: 左右交互に行きたい位置を変える(あとはドライバーのステア操作の結果)
+        E.swerveI++; st.dT = E.swerveBaseD + (E.swerveI % 2 ? 1 : -1) * E.swerveAmp;
+        E.swerveT = E.burstDur / E.swerveN;
       }
     }
-  } else {
-    gtrEv.vs = Math.min(gtrEv.vs + dt * 5, cruiseV);
   }
-  const chaseRate = (gtrEv.burst > 0 && gtrEv.kind === 'drift') ? 20 : 6;   // 蛇行中は車線追従をかなり速く(急ハンドル感)
-  const cur = gtrEv.deck ? gtrEv.lane : gtrEv.d;
-  const nd = cur + clamp(gtrEv.targetD - cur, -dt * chaseRate, dt * chaseRate);
-  const latVel = (nd - cur) / Math.max(dt, 1e-3);                      // 実際に車体が横へ動いた速さ → ここから向き(ドリフト角)を逆算する。動かすだけでなく、ちゃんと「滑ってる向き」で描く
-  if (gtrEv.deck) gtrEv.lane = nd; else gtrEv.d = nd;
-  const slipT = clamp(Math.atan2(latVel, Math.max(gtrEv.vs, 8)), -.62, .62);
-  gtrEv.yawK += (slipT - gtrEv.yawK) * Math.min(1, dt * 9);            // 車体の向きは実際の滑り角へなめらかに追従(スクリプトされた首振りではなく、動きから逆算)
-  gtrEv.roll = clamp(-gtrEv.yawK * .3, -.2, .2);
-  const sliding = Math.abs(latVel) > 1.3;
+  if (mode !== 'drift') st.dT = E.deck ? (st.d > 0 ? DECK_W / 4 : -DECK_W / 4) : (st.d < 3.6 ? 1.8 : 5.4);   // 普段は近い方の車線の真ん中を走る
+  let kappa, q;
+  if (E.deck) { q = pathAt(DECK, st.s, st.d); const q2 = pathAt(DECK, st.s + 2, st.d); kappa = angDiff(q2.h, q.h) / 2; }
+  else { q = centerAt(st.s); kappa = q.k; }
+  gtrDrive(st, dt, kappa, mode, cruiseV);
+  const hed = q.h + st.psi, roll = clamp(-st.ay * .008, -.12, .12), pitch = clamp(-st.ax * .004, -.05, .05);
+  const sliding = Math.abs(st.slipR) > .13, brk = st.brk > .3;
   let relS;
-  if (gtrEv.deck) {
-    gtrEv.u += gtrEv.vs * dt; const q = pathAt(DECK, gtrEv.u, gtrEv.lane), hed = q.h + gtrEv.yawK;
-    gtrMesh.group.position.set(q.x, HW_H, q.z); gtrMesh.group.rotation.set(0, hed, gtrEv.roll);
+  if (E.deck) {
+    gtrMesh.group.position.set(q.x, HW_H, q.z); gtrMesh.group.rotation.set(pitch, hed, roll);
     if (sliding) gtrSmoke(q.x, HW_H, q.z, hed);
-    relS = gtrEv.u - pathProject(DECK, car.x, car.z).s; relS = ((relS + DECK.len / 2) % DECK.len + DECK.len) % DECK.len - DECK.len / 2;
+    relS = st.s - pathProject(DECK, car.x, car.z).s; relS = ((relS + DECK.len / 2) % DECK.len + DECK.len) % DECK.len - DECK.len / 2;
   } else {
-    gtrEv.s += gtrEv.vs * dt; const q = centerAt(gtrEv.s), x = q.x + Math.cos(q.h) * gtrEv.d, z = q.z - Math.sin(q.h) * gtrEv.d, hed = q.h + gtrEv.yawK;
-    gtrMesh.group.position.set(x, q.y, z); gtrMesh.group.rotation.set(-Math.atan(q.sl || 0), hed, gtrEv.roll);
+    const x = q.x + Math.cos(q.h) * st.d, z = q.z - Math.sin(q.h) * st.d;
+    gtrMesh.group.position.set(x, q.y, z); gtrMesh.group.rotation.set(-Math.atan(q.sl || 0) + pitch, hed, roll);
     if (sliding) gtrSmoke(x, q.y, z, hed);
-    relS = gtrEv.s - car.s;
+    relS = st.s - car.s;
   }
   gtrMesh.tailMat.color.setHex(brk ? 0xff2a2a : 0x8a1010);
-  if (gtrEv.aliveT > 20 || Math.abs(relS) > 260) gtrEnd();             // 出てから20秒、または自車から260m離れたら消える
+  if (E.aliveT > 22 || Math.abs(relS) > 260) gtrEnd();                 // 出てから22秒、または自車から260m離れたら消える
 }
 
 /* =====================================================================
@@ -2450,6 +2602,7 @@ const eyeV = new THREE.Vector3();
 function updateCamera(dt) {
   if (PLAYER.model) {
     PLAYER.model.visible = camMode === 0; cockpit.visible = camMode === 1;
+    if (camMode === 1 && cockpit.userData.tick) cockpit.userData.tick(dt);
     const target = ghost ? .4 : 1;                               // 貫通中は半透明
     PLAYER.ghostA += (target - PLAYER.ghostA) * Math.min(1, dt * 10);
     const solid = PLAYER.ghostA > .98;

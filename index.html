@@ -842,6 +842,7 @@ const VEHICLES = {
    セレナの運転席(一人称視点): 参考写真に合わせた内装。横長のダッシュ・運転席前の12.3型メーターと中央のナビ(どちらも実際の走行状態に連動して描く)・
    Nissanエンブレム付きのフラットボトム・ハンドル・太いAピラー・ドアミラー・ルームミラー。右ハンドル(運転席は車の右=-X側)。
    ===================================================================== */
+let meterStyle = 'enhance';                                     // セレナのメーター表示: 'enhance'(エネルギーモニター) / 'classic'(丸型2つ)。Iキーで切り替え
 function buildSerenaCockpit(cp, ck, eye) {
   const mTop = new THREE.MeshLambertMaterial({ color: 0x5a5b60 }), mLow = new THREE.MeshLambertMaterial({ color: 0x35363a }), mPillar = new THREE.MeshLambertMaterial({ color: 0x3a3b3f }), mLeather = new THREE.MeshLambertMaterial({ color: 0x151516 });
   const mTrim = new THREE.MeshStandardMaterial({ color: 0xb4b7bc, metalness: .85, roughness: .38 }), mGloss = new THREE.MeshStandardMaterial({ color: 0x050506, roughness: .18, metalness: .35 });
@@ -865,7 +866,7 @@ function buildSerenaCockpit(cp, ck, eye) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
     m.position.set(x, y, z); faceEye(m, k); add(m); return { g: cv.getContext('2d'), tex, W: pw, H: ph };
   };
-  const meter = mk(.30, .118, 640, 250, ck.wheel.pos[0], 1.125, 1.392, 1);
+  const meter = mk(.30, .118, 768, 300, ck.wheel.pos[0], 1.125, 1.392, 1);
   const nav = mk(.31, .122, 640, 250, .0, 1.125, 1.392, .6);
   // ハンドル(フラットボトム): ピボットの中は顔が+Zの平面。回転はゲーム側が pivot.rotation.z を動かす
   const w2 = new THREE.Group(); w2.position.set(...ck.wheel.pos); w2.rotation.x = ck.wheel.rot;
@@ -889,39 +890,89 @@ function buildSerenaCockpit(cp, ck, eye) {
   add(box(.22, .055, .03, mLeather, 0, 1.6, 1.3)); beam([0, 1.6, 1.3], [0, 1.74, 1.24], .02, .02, mLeather);
   // 中身: 実際の走行状態から描く(視点が運転席のときだけ、約15Hzで更新)
   let acc = 1;
-  const arc = (g, cx, cy, r, a0, a1, w, col) => { g.beginPath(); g.arc(cx, cy, r, a0, a1); g.lineWidth = w; g.strokeStyle = col; g.lineCap = 'round'; g.stroke(); };
-  const A0 = Math.PI * .75, SW = Math.PI * 1.5;
-  function drawMeter(st) {
-    const { g, W, H } = meter;
-    g.fillStyle = '#04050a'; g.fillRect(0, 0, W, H);
-    const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, 'rgba(60,90,140,.18)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H);
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    // 右: 速度計
-    let cx = 506, cy = 128, r = 98;
-    arc(g, cx, cy, r, A0, A0 + SW, 9, '#1a202c'); const f = clamp(st.kmh / 180, 0, 1); if (f > .004) arc(g, cx, cy, r, A0, A0 + SW * f, 9, '#47c6ff');
-    g.fillStyle = '#8791a3'; g.font = 'bold 15px sans-serif';
-    for (let v = 0; v <= 180; v += 20) { const a = A0 + SW * v / 180; g.fillText(String(v), cx + Math.cos(a) * (r - 26), cy + Math.sin(a) * (r - 26)); }
-    g.fillStyle = '#fff'; g.font = 'bold 76px sans-serif'; g.fillText(String(Math.round(st.kmh)), cx, cy - 4);
-    g.fillStyle = '#9aa4b8'; g.font = '19px sans-serif'; g.fillText('km/h', cx, cy + 48);
-    // 左: パワー(アクセルの出力)と回生、中央にシフト
-    cx = 134;
-    arc(g, cx, cy, r, A0, A0 + SW, 9, '#1a202c'); if (st.power > .004) arc(g, cx, cy, r, A0, A0 + SW * st.power, 9, '#47c6ff');
-    if (st.regen) arc(g, cx, cy, r - 14, A0, A0 + SW * .12, 6, '#5fe0a0');
-    g.fillStyle = '#fff'; g.font = 'bold 74px sans-serif'; g.fillText(st.gear, cx, cy - 6);
-    g.fillStyle = '#9aa4b8'; g.font = '16px sans-serif'; g.fillText('POWER', cx, cy + 46);
-    g.fillStyle = st.batt > .3 ? '#5fd4a0' : st.batt > .12 ? '#fc4' : '#f55'; g.fillRect(cx - 40, cy + 66, 80 * st.batt, 7); g.strokeStyle = '#4a5468'; g.lineWidth = 1.5; g.strokeRect(cx - 40, cy + 66, 80, 7);
-    // 中央: 時刻・クルマ(ProPILOT作動中は緑)・走行距離
-    cx = 320;
-    g.fillStyle = '#c9d0de'; g.font = '20px sans-serif'; g.fillText(st.clock, cx, 30);
-    const on = st.pp === 'on', col = on ? '#3ee08a' : st.pp === 'search' ? '#e8edf7' : '#6b7486';
-    g.strokeStyle = col; g.lineWidth = 4; g.setLineDash(on ? [] : [10, 8]);
-    for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(cx + sx * 46, 60); g.lineTo(cx + sx * 46, 195); g.stroke(); }
-    g.setLineDash([]); g.fillStyle = col; g.beginPath(); g.roundRect(cx - 22, 92, 44, 78, 12); g.fill();
-    g.fillStyle = '#04050a'; g.fillRect(cx - 14, 104, 28, 14); g.fillRect(cx - 14, 146, 28, 10);
-    g.fillStyle = on ? '#3ee08a' : '#8d97aa'; g.font = '15px sans-serif'; g.fillText(on ? 'ProPILOT  ' + st.setKmh : st.mode, cx, 188);
-    g.fillStyle = '#8d97aa'; g.fillText(st.trip + ' km', cx, 226);
-    meter.tex.needsUpdate = true;
+  const D2R = Math.PI / 180;
+  const rr = (g, x, y, w, h, r, fill, stroke) => { g.beginPath(); g.roundRect(x, y, w, h, r); if (fill) { g.fillStyle = fill; g.fill(); } if (stroke) { g.strokeStyle = stroke; g.lineWidth = 1.5; g.stroke(); } };
+  const txt = (g, t, x, y, font, col, al = 'center') => { g.font = font; g.fillStyle = col; g.textAlign = al; g.textBaseline = 'middle'; g.fillText(t, x, y); };
+  // 丸いメーターの目盛りと数字(a0〜a1は度。キャンバスは3時が0°で時計回り)
+  function dial(g, cx, cy, a0, a1, vmax, step, major, r0, r1, bandCol) {
+    g.beginPath(); g.arc(cx, cy, (r0 + r1) / 2, a0 * D2R, a1 * D2R); g.lineWidth = r1 - r0; g.strokeStyle = bandCol; g.lineCap = 'butt'; g.stroke();
+    for (let v = 0; v <= vmax + .01; v += step) {
+      const a = (a0 + (a1 - a0) * v / vmax) * D2R, big = v % major === 0, c = Math.cos(a), s = Math.sin(a), ra = r1 + 4, rb = r1 + (big ? 16 : 10);
+      g.beginPath(); g.moveTo(cx + c * ra, cy + s * ra); g.lineTo(cx + c * rb, cy + s * rb); g.lineWidth = big ? 2.4 : 1.6; g.strokeStyle = big ? '#fff' : '#a9acb3'; g.stroke();
+      if (big && v > 0) txt(g, String(v), cx + c * (r0 + r1) / 2, cy + s * (r0 + r1) / 2, 'bold 20px sans-serif', '#fff');
+    }
   }
+  function drawClassic(st) {
+    const { g, W, H } = meter, ang = st.power * 195 - st.regen * 75;
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
+    // 左: パワー計(0の左側が回生)
+    const lx = 146, ly = 158, rx = 622, r0 = 90, r1 = 116;
+    g.beginPath(); g.arc(lx, ly, (r0 + r1) / 2, 135 * D2R, 210 * D2R); g.lineWidth = r1 - r0; g.strokeStyle = '#1e2a3a'; g.stroke();
+    dial(g, lx, ly, 210, 405, 100, 5, 20, r0, r1, '#3b3c41');
+    g.beginPath(); g.arc(lx, ly, 80, 135 * D2R, 405 * D2R); g.lineWidth = 4; g.strokeStyle = '#2c2d31'; g.stroke();
+    { const a = (210 + ang) * D2R, c = Math.cos(a), s = Math.sin(a); g.beginPath(); g.moveTo(lx + c * (r0 - 10), ly + s * (r0 - 10)); g.lineTo(lx + c * (r1 + 3), ly + s * (r1 + 3)); g.lineWidth = 4.5; g.strokeStyle = '#fff'; g.stroke(); g.beginPath(); g.arc(lx + c * (r0 - 10), ly + s * (r0 - 10), 5, 0, 7); g.lineWidth = 2; g.stroke(); }
+    { const a = 172 * D2R; g.strokeStyle = st.regenOn ? '#4db2ff' : '#2d6aa5'; g.lineWidth = 3; for (const o of [0, Math.PI]) { g.beginPath(); g.arc(lx + Math.cos(a) * 103, ly + Math.sin(a) * 103, 8, o + .4, o + 2.6); g.stroke(); } }
+    rr(g, lx - 34, 108, 68, 20, 4, '#3a3b40'); txt(g, 'READY', lx, 118.5, 'bold 13px sans-serif', '#d8dae0');
+    rr(g, lx - 50, 132, 100, 20, 4, st.ePedal ? '#1d4f7a' : '#3a3b40'); txt(g, st.ePedal ? 'e-Pedal ON' : 'e-Pedal OFF', lx, 142.5, 'bold 13px sans-serif', '#d8dae0');
+    txt(g, st.gear, lx, 177, 'bold 56px sans-serif', '#fff');
+    txt(g, 'POWER %', lx, 215, 'bold 14px sans-serif', '#fff');
+    rr(g, lx - 52, 226, 104, 22, 3, null, '#d8dae0'); txt(g, st.modeName, lx, 237.5, 'bold 14px sans-serif', '#fff');
+    // 右: 速度計
+    dial(g, rx, ly, 135, 405, 180, 5, 20, r0, r1, '#3b3c41');
+    g.beginPath(); g.arc(rx, ly, 80, 135 * D2R, 405 * D2R); g.lineWidth = 4; g.strokeStyle = '#2c2d31'; g.stroke();
+    { const sa = (135 + clamp(st.kmh / 180, 0, 1) * 270) * D2R; g.beginPath(); g.arc(rx, ly, (r0 + r1) / 2, sa - .035, sa + .035); g.lineWidth = r1 - r0 + 6; g.strokeStyle = '#fff'; g.stroke(); }
+    txt(g, String(Math.round(st.kmh)), rx, ly - 6, 'bold 64px sans-serif', '#fff'); txt(g, 'km/h', rx, ly + 40, '15px sans-serif', '#fff');
+    // 中央: 時刻・車線・メッセージ
+    txt(g, st.clock, 384, 22, '21px sans-serif', '#fff'); txt(g, '‹', 300, 24, 'bold 28px sans-serif', '#fff'); txt(g, '›', 468, 24, 'bold 28px sans-serif', '#fff');
+    const on = st.pp === 'on', lc = on ? '#3ee08a' : '#3a3b3f';
+    g.strokeStyle = lc; g.lineWidth = 6; g.lineCap = 'round';
+    for (const [x0, x1] of [[298, 362], [470, 406]]) { g.beginPath(); g.moveTo(x0, 270); g.lineTo(x1, 66); g.stroke(); }
+    if (on && st.lead) { const y = 236 - clamp(st.lead / 90, 0, 1) * 150; rr(g, 384 - 11, y, 22, 28, 5, '#ffcf3a'); rr(g, 384 - 8, y + 5, 16, 6, 2, '#000'); }
+    if (on) rr(g, 384 - 12, 238, 24, 34, 6, '#3ee08a');
+    if (st.msg) { rr(g, 292, 168, 184, 44, 2, '#383a3f'); txt(g, st.msg, 384, 190, 'bold 17px sans-serif', '#fff'); }
+    txt(g, st.trip + ' km', 332, 284, '17px sans-serif', '#fff');
+    // 右下: 電池の残り(実車は燃料)
+    rr(g, 520, 276, 22, 12, 2, null, '#fff'); g.fillStyle = '#fff'; g.fillRect(542, 279, 3, 6);
+    g.fillStyle = '#3b3c41'; g.fillRect(552, 278, 150, 9); g.fillStyle = st.batt > .3 ? '#8fe0b8' : st.batt > .12 ? '#fc4' : '#f55'; g.fillRect(552, 278, 150 * st.batt, 9);
+    txt(g, '0', 552, 270, '12px sans-serif', '#fff', 'left'); txt(g, '1', 702, 270, '12px sans-serif', '#fff', 'right');
+  }
+  function drawEnhance(st) {
+    const { g, W, H } = meter, mark = 100 + st.power * 150 - st.regen * 60;
+    g.fillStyle = '#05060a'; g.fillRect(0, 0, W, H);
+    // 上段: 左=パワー(0の左は回生) / 中央=速度 / 右=電池
+    txt(g, '0', 100, 40, '17px sans-serif', '#fff'); txt(g, '100', 250, 40, '17px sans-serif', '#fff', 'right');
+    g.fillStyle = '#3b3d44'; g.fillRect(40, 56, 210, 13); g.fillStyle = '#8b8e97'; g.fillRect(100, 56, Math.max(0, mark - 100), 13); if (mark < 100) { g.fillStyle = '#4db2ff'; g.fillRect(mark, 56, 100 - mark, 13); }
+    for (let i = 0; i <= 14; i++) { g.fillStyle = '#cfd2d8'; g.fillRect(40 + i * 15, 52, 1.5, i % 5 === 0 ? 4 : 3); }
+    g.fillStyle = '#fff'; g.fillRect(mark - 1.5, 50, 3, 24);
+    { g.strokeStyle = st.regenOn ? '#4db2ff' : '#2d6aa5'; g.lineWidth = 3; for (const o of [0, Math.PI]) { g.beginPath(); g.arc(46, 38, 8, o + .4, o + 2.6); g.stroke(); } }
+    txt(g, 'POWER %', 40, 90, 'bold 16px sans-serif', '#fff', 'left');
+    txt(g, String(Math.round(st.kmh)), 384, 54, 'bold 62px sans-serif', '#fff'); txt(g, 'km/h', 384, 98, '14px sans-serif', '#c9ccd3');
+    txt(g, '0', 530, 40, '17px sans-serif', '#fff', 'left'); txt(g, '1', 740, 40, '17px sans-serif', '#fff', 'right');
+    g.fillStyle = '#3b3d44'; g.fillRect(530, 56, 210, 13); g.fillStyle = st.batt > .3 ? '#cfd4dc' : st.batt > .12 ? '#fc4' : '#f55'; g.fillRect(530, 56, 210 * st.batt, 13);
+    for (let i = 0; i <= 14; i++) { g.fillStyle = '#cfd2d8'; g.fillRect(530 + i * 15, 52, 1.5, i % 5 === 0 ? 4 : 3); }
+    rr(g, 590, 28, 20, 11, 2, null, '#fff'); g.fillStyle = '#fff'; g.fillRect(610, 30, 3, 6); txt(g, Math.round(st.batt * 100) + '%', 740, 90, 'bold 16px sans-serif', '#fff', 'right');
+    g.fillStyle = '#c4161f'; g.fillRect(20, 120, 728, 2);
+    txt(g, 'エネルギーモニター', 384, 146, 'bold 23px sans-serif', '#fff'); txt(g, '‹', 70, 146, 'bold 30px sans-serif', '#fff'); txt(g, '›', 698, 146, 'bold 30px sans-serif', '#fff');
+    // エネルギーフロー: ワゴンの透視図(前が左)。エンジン(発電)→電池→前輪のモーターの流れを実際の状態で動かす
+    g.save(); g.translate(0, 8);
+    g.beginPath(); g.moveTo(240, 247); g.lineTo(250, 232); g.lineTo(282, 222); g.lineTo(318, 186); g.lineTo(346, 172); g.lineTo(506, 172); g.lineTo(522, 190); g.lineTo(528, 236); g.lineTo(524, 252); g.lineTo(250, 252); g.closePath();
+    g.fillStyle = '#16181d'; g.fill(); g.strokeStyle = '#6a6e77'; g.lineWidth = 2; g.stroke();
+    g.beginPath(); g.moveTo(326, 190); g.lineTo(350, 178); g.lineTo(500, 178); g.lineTo(512, 196); g.lineTo(512, 206); g.lineTo(318, 206); g.closePath(); g.fillStyle = '#242a33'; g.fill();
+    for (const wx of [296, 482]) { g.beginPath(); g.arc(wx, 252, 21, 0, 7); g.fillStyle = '#0b0c0f'; g.fill(); g.strokeStyle = '#9aa0a8'; g.lineWidth = 3; g.stroke(); for (let k = 0; k < 5; k++) { const a = k * 1.2566 + st.wheel; g.beginPath(); g.moveTo(wx, 252); g.lineTo(wx + Math.cos(a) * 17, 252 + Math.sin(a) * 17); g.lineWidth = 2; g.stroke(); } }
+    const eg = st.engineOn ? 1 : .25; g.fillStyle = `rgba(255,${Math.round(120 + 40 * eg)},30,${.35 + .65 * eg})`; g.fillRect(262, 218, 34, 28); if (st.engineOn) { g.shadowColor = '#ff8a2a'; g.shadowBlur = 14; g.fillRect(262, 218, 34, 28); g.shadowBlur = 0; }
+    const lit = Math.round(st.batt * 5); for (let k = 0; k < 5; k++) { g.fillStyle = k < lit ? (k === 0 && st.batt < .2 ? '#f55' : '#3a9bff') : '#2a2d35'; g.fillRect(372 + k * 14, 206, 11, 32); }
+    const dots = (x0, x1, y, col) => { for (let k = 0; k < 6; k++) { const t = ((k / 6) + st.flow) % 1; g.beginPath(); g.arc(x0 + (x1 - x0) * t, y, 4, 0, 7); g.fillStyle = col; g.fill(); } };
+    if (st.engineOn) dots(300, 366, 232, '#ffc12e');
+    if (st.power > .04) dots(368, 300, 242, '#ffe27a'); else if (st.regenOn) dots(300, 368, 242, '#5fe0a0');
+    g.restore();
+    // 下段
+    rr(g, 20, 276, 108, 20, 3, null, '#fff'); txt(g, st.modeName, 74, 286.5, 'bold 13px sans-serif', '#fff');
+    if (st.ePedal) txt(g, 'e-Pedal', 144, 286, '14px sans-serif', '#7cc4ff', 'left');
+    txt(g, st.clock, 330, 286, '16px sans-serif', '#c9ccd3'); txt(g, st.trip + ' km', 748, 286, '17px sans-serif', '#fff', 'right');
+    if (st.pp === 'on') { rr(g, 440, 274, 150, 22, 4, '#143d26'); txt(g, 'ProPILOT ' + st.setKmh + 'km/h', 515, 285, 'bold 14px sans-serif', '#3ee08a'); }
+  }
+  let regSm = 0, flow = 0, whl = 0;
+  function drawMeter(st) { (st.style === 'classic' ? drawClassic : drawEnhance)(st); meter.tex.needsUpdate = true; }
   function drawNav(st) {
     const { g, W, H } = nav;
     g.fillStyle = '#ece7d6'; g.fillRect(0, 0, W, H);
@@ -941,12 +992,14 @@ function buildSerenaCockpit(cp, ck, eye) {
   }
   cp.userData.steerPivot = w2;
   cp.userData.tick = dt => {
-    acc += dt; if (acc < .066) return; acc = 0;
-    const kmh = Math.hypot(car.vx, car.vz) * 3.6, rev = Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5, hr = todHours();
-    drawMeter({ kmh, power: car.out || 0, regen: !!car.regenOn, batt: car.batt, gear: rev ? 'R' : VEH.powertrain.coastB ? decelSel : 'D', pp: PP.state, setKmh: Math.round(PP.set * 3.6), mode: M.name + (ePedal ? ' e-Pedal' : ''), trip: (dist / 1000).toFixed(1), clock: String(Math.floor(hr)).padStart(2, '0') + ':' + String(Math.floor(hr % 1 * 60)).padStart(2, '0') });
+    regSm += ((car.regenOn ? .55 : 0) - regSm) * Math.min(1, dt * 6); flow = (flow + dt * (car.engOn || car.charging || car.assist ? 1.3 : 2.2)) % 1; whl += Math.hypot(car.vx, car.vz) * dt / .33;
+    acc += dt; if (acc < .05) return; acc = 0;
+    const kmh = Math.hypot(car.vx, car.vz) * 3.6, rev = Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5, hr = todHours(), on = PP.state === 'on';
+    drawMeter({ style: meterStyle, kmh, power: clamp(car.out || 0, 0, 1), regen: regSm, regenOn: !!car.regenOn, batt: car.batt, gear: rev ? 'R' : VEH.powertrain.coastB ? decelSel : 'D', ePedal, modeName: M.name === 'NORMAL' ? 'STANDARD' : M.name, engineOn: !!(car.engOn || car.charging || car.assist), flow, wheel: whl, pp: PP.state, setKmh: Math.round(PP.set * 3.6), lead: on && PP.lead ? PP.lead.gap : 0, msg: PP.msgT > 0 ? PP.msg : '', trip: (dist / 1000).toFixed(1), clock: String(Math.floor(hr)).padStart(2, '0') + ':' + String(Math.floor(hr % 1 * 60)).padStart(2, '0') });
     drawNav({ kmh: Math.round(kmh), dist });
   };
-  drawMeter({ kmh: 0, power: 0, regen: false, batt: .65, gear: 'D', pp: 'off', setKmh: 0, mode: '', trip: '0.0', clock: '--:--' }); drawNav({ kmh: 0, dist: 0 });
+  cp.userData.redraw = () => { acc = 1; };
+  drawMeter({ style: meterStyle, kmh: 0, power: 0, regen: 0, regenOn: false, batt: .65, gear: 'D', ePedal: false, modeName: 'STANDARD', engineOn: false, flow: 0, wheel: 0, pp: 'off', setKmh: 0, lead: 0, msg: '', trip: '0.0', clock: '--:--' }); drawNav({ kmh: 0, dist: 0 });
   return w2;
 }
 const RIGS = {};
@@ -1050,6 +1103,7 @@ addEventListener('keydown', e => {
   }
   if (e.code === 'KeyQ') setDriveMode(driveMode === 'eco' ? 'normal' : driveMode === 'normal' ? 'sport' : 'eco');
   if (e.code === 'KeyE' && hasEPedal()) { ePedal = !ePedal; popup(ePedal ? 'e-Pedal ON' : 'e-Pedal OFF'); }
+  if (e.code === 'KeyI' && cockpit && cockpit.userData.tick) { meterStyle = meterStyle === 'enhance' ? 'classic' : 'enhance'; cockpit.userData.redraw(); popup('メーター: ' + (meterStyle === 'enhance' ? 'エンハンス' : 'クラシック')); }
   if (e.code === 'KeyB' && VEH.powertrain.coastB) { decelSel = decelSel === 'D' ? 'B' : 'D'; popup('シフト ' + decelSel + (decelSel === 'B' ? '(回生を強める)' : '(穏やかな減速)')); }
   if (e.code === 'KeyM') { muted = !muted; if (master) master.gain.value = muted ? 0 : .5; }
   if (e.code === 'KeyN') { todEnabled = !todEnabled; updateSky(true); if (typeof refreshEnv === 'function' && envReady) refreshEnv(); popup(todEnabled ? '現実の時間と連動: ON' : '現実の時間と連動: OFF(常に昼)'); }

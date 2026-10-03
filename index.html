@@ -1983,7 +1983,7 @@ function gtrDrive(e, dt, kappa, mode, cruiseV) {                                
   const agg = mode === 'drift', cosP = Math.cos(e.psi), sinP = Math.sin(e.psi);
   const sdot = (e.v * cosP - e.vy * sinP) / Math.max(.3, 1 - kappa * e.d), ddot = e.v * sinP + e.vy * cosP;
   const chs = mode === 'chase';                                                           // 追跡される犯人: 車線変更は素早く、ブレーキは強く(上手いドライバー)
-  const pm = agg ? .5 : chs ? .3 : .2, psiDes = clamp((e.dT - e.d) * (agg ? 3.4 : chs ? 1.9 : 1) / e.v - ddot * (agg ? .018 : chs ? .05 : .03), -pm, pm);   // 横位置の誤差から「向けたい向き」を決める(横に速く動いているときは手前から戻す)
+  const pm = agg ? .5 : chs ? .34 : .2, psiDes = clamp((e.dT - e.d) * (agg ? 3.4 : chs ? 3.2 : 1) / e.v - ddot * (agg ? .018 : chs ? .035 : .03), -pm, pm);   // 横位置の誤差から「向けたい向き」を決める(横に速く動いているときは手前から戻す)
   const rDes = clamp((agg ? 4.5 : chs ? 3.6 : 3) * (psiDes - e.psi), agg ? -1.2 : chs ? -.6 : -.4, agg ? 1.2 : chs ? .6 : .4) + kappa * sdot;   // 欲しいヨーレート
   let steer = clamp(GTR_L * rDes / e.v + .16 * (rDes - e.r), -.4, .4);
   const k = clamp((Math.abs(e.slipR) - .12) / .12, 0, 1);                                  // お尻が限界を越えて流れ出したら、カウンターステア(前輪を進行方向へ向ける)
@@ -2143,27 +2143,36 @@ function chaseSuspectStep(dt) {
   // カーブ: 先の曲率から、そこで出せる速さ(横G上限)に間に合うよう手前から減速する
   let vLim = CHASE.vmax; const reach = v * v / (2 * CHASE.brakeDec) + 40;
   for (let a = 0; a <= reach; a += 15) { const k = Math.abs(centerAt(E.s + a, _cs).k); if (k > 1e-5) { const vA = Math.sqrt(CHASE.ayLim / k); vLim = Math.min(vLim, Math.sqrt(vA * vA + 2 * CHASE.brakeDec * a)); } }
-  // 前の車: 同じ向きの車線ごとに、前の車までの空きを見る。詰まったら空いている隣の車線へ移り、移れなければ手前から合わせて減速
-  const look = Math.max(70, v * 2.2), same = LANES.filter(l => l.dir > 0);
+  // 前の車: 各車線で「いま出せる速さ」を比べ、いちばん速く走れる車線へ素早く移る。左右とも詰まっていて空きがなければ、対向車線に出て追い越し、追い越したら元の車線へ戻る
+  const look = Math.max(80, v * 2.4), same = LANES.filter(l => l.dir > 0), opp = LANES.find(l => l.dir < 0 && l.d > -3);
   const ahead = ld => { let gap = 1e9, vl = 1e9; for (const o of traffic) { if (!o.active || Math.abs(o.d - ld) > 2.3) continue; const a = o.s - E.s; if (a <= -2) continue; const g = a - (o.l + 4.7) / 2; if (g < gap) { gap = g; vl = Math.max(0, o.vs); } } return { gap, vl }; };
-  const sideClear = ld => !traffic.some(o => o.active && Math.abs(o.d - ld) < 2.4 && o.s - E.s > -16 && o.s - E.s < 34);
+  const sideClear = ld => {                                                              // その車線へ移れるか: 真横にいない / 追いついてしまう遅い車がいない / 後ろから来る速い車にぶつけられない
+    for (const o of traffic) { if (!o.active || Math.abs(o.d - ld) > 2.4) continue; const rel = o.s - E.s;
+      if (rel > -9 && rel < 11) return false;
+      if (rel >= 11 && rel < 11 + Math.max(0, v - o.vs) * 1.4) return false;
+      if (rel <= -9 && rel > -(9 + Math.max(0, o.vs - v) * 1.6)) return false; }
+    return true;
+  };
+  const crossOK = ld => same.concat(opp ? [opp] : []).every(l => !(l.d > Math.min(E.d, ld) + .5 && l.d < Math.max(E.d, ld) - .5) || sideClear(l.d));   // 途中で横切る車線にも、ぶつかる車がいないこと
+  const speedPot = r => r.gap >= look ? vLim : Math.min(vLim, Math.sqrt(r.vl * r.vl + 2 * 6.5 * Math.max(0, r.gap - 7)));
   CHASE.laneCd = Math.max(0, CHASE.laneCd - dt);
-  const opp = LANES.find(l => l.dir < 0 && l.d > -3);                                   // 対向の内側車線(詰まったら、空いていれば犯人は対向車線に出て追い越す)
   let me = ahead(E.dT);
-  if (E.dT > 0) {
-    if (me.gap < look * .75 && me.vl < v * .92 && CHASE.laneCd <= 0) {
-      let best = null, bg = me.gap + 12;
-      for (const l of same) { if (Math.abs(l.d - E.dT) < 1) continue; const r = ahead(l.d); if (r.gap > bg && sideClear(l.d)) { best = l; bg = r.gap; } }
-      if (!best && opp) { const r = ahead(opp.d); if (r.gap > 300 && sideClear(opp.d)) best = opp; }
-      if (best) { E.dT = best.d; CHASE.laneCd = 3; me = ahead(E.dT); }
+  if (CHASE.laneCd <= 0) {
+    const onOpp = E.dT < 0, cur = speedPot(me) - (onOpp ? 8 : 0);
+    let best = null, bs = cur + (onOpp ? 0 : 4);
+    for (const l of same.concat(opp ? [opp] : [])) {
+      if (Math.abs(l.d - E.dT) < 1 || !sideClear(l.d) || !crossOK(l.d)) continue;
+      const r = ahead(l.d); let sc = speedPot(r);
+      if (l.dir < 0) { if (r.gap < 290) continue; sc -= 8; }
+      if (sc > bs) { best = l; bs = sc; }
     }
-  } else {                                                                              // 対向車線を走っている間: 追い越し終わるか、対向車が近づいたら元の車線へ戻る
-    let back = null, bgp = 0;
-    for (const l of same) { const r = ahead(l.d); if (sideClear(l.d) && r.gap > 45 && r.gap > bgp) { back = l; bgp = r.gap; } }
-    if (back && (me.gap < 320 || (CHASE.laneCd <= 0 && bgp > 80))) { E.dT = back.d; CHASE.laneCd = 2.5; me = ahead(E.dT); }
+    if (!best && onOpp && me.gap < 150) {                                                // 対向車が迫っている: 多少きつくても、空きの大きい元の車線へ割り込む
+      let bg = 0; for (const l of same) { if (!crossOK(l.d)) continue; const r = ahead(l.d); const near = traffic.some(o => o.active && Math.abs(o.d - l.d) < 2.4 && Math.abs(o.s - E.s) < 8); if (!near && r.gap > bg) { best = l; bg = r.gap; } }
+    }
+    if (best) { E.dT = best.d; CHASE.laneCd = best.dir < 0 ? 2.4 : 1.5; me = ahead(E.dT); }
   }
   let vT = vLim;
-  if (me.gap < look) vT = Math.min(vT, Math.sqrt(me.vl * me.vl + 2 * 6.5 * Math.max(0, me.gap - 7)));
+  for (const r of [me, ahead(E.d)]) if (r.gap < look) vT = Math.min(vT, Math.sqrt(r.vl * r.vl + 2 * 6.5 * Math.max(0, r.gap - 7)));   // 車線を移っている最中は、いまいる車線と移る先の両方の前の車に合わせる
   const q = centerAt(E.s, _cs), kappa = q.k;
   gtrDrive(E, dt, kappa, 'chase', vT);
   if (Math.abs(E.psi) > .8) { E.psi *= .6; E.r = 0; E.vy *= .3; }                       // 万一スピンしかけても、そのまま回り続けない(立て直す)
@@ -2189,7 +2198,7 @@ function chaseCheckHit() {
 function chaseStep(dt) {
   if (!CHASE.on) return;
   CHASE.t += dt; CHASE.hitMsgT = Math.max(0, CHASE.hitMsgT - dt); lbUpdate(dt);
-  chaseSuspectStep(dt);
+  const sub = Math.max(1, Math.ceil(dt * 45)); for (let i = 0; i < sub; i++) chaseSuspectStep(dt / sub);   // フレームが遅い端末でも、犯人の運転が荒れないよう細かく刻む
   const gap = CHASE.st.s - car.s;
   if (chaseCheckHit()) {
     const t = CHASE.t, ms = Math.round((t % 1) * 100);

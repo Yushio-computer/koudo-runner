@@ -2120,34 +2120,62 @@ function chaseBuildMesh() {
   return m;
 }
 const CHASE_PRESET = {
-  public: { limit: 135, vmax: 53, pace: [[30, 1.12], [90, 1.05], [160, 1.0], [300, .94], [450, .9]], loseDist: 550, startGap: [150, 190] },
-  city: { limit: 120, vmax: 36, pace: [[25, 1.12], [70, 1.05], [130, 1.0], [220, .94], [320, .9]], loseDist: 330, startGap: [110, 160] },
+  public: { limit: 135, vmax: 53, vmaxDeck: 53, pace: [[30, 1.12], [90, 1.05], [160, 1.0], [300, .94], [450, .9]], loseDist: 550, startGap: [150, 190] },
+  city: { limit: 120, vmax: 36, vmaxDeck: 50, pace: [[25, 1.12], [70, 1.05], [130, 1.0], [220, .94], [320, .9]], loseDist: 330, startGap: [110, 160] },
 };
 Object.assign(CHASE, { city: false, P: null, turns: [], nodes: [], near: [], gapNow: 0, sx: 0, sy: 0, sz: 0, hed: 0 });
-const _qA = { x: 0, z: 0, h: 0 }, _qB = { x: 0, z: 0, h: 0 }, _qC = { x: 0, z: 0, h: 0 }, chasePool = [];
+const _qA = { x: 0, z: 0, h: 0 }, _qB = { x: 0, z: 0, h: 0 }, _qC = { x: 0, z: 0, h: 0 }, _qP = { x: 0, z: 0, h: 0 }, chasePool = [];   // _qA/_qB は cityK 専用(姿勢用の _qP と分ける)
 /* ---- 都市の追跡: 犯人は交差点ごとに直進・左折・右折をえらんで走る。経路は中心線の点列(mkPath)で作り、道路の幅の中で車線(d)をえらぶ ---- */
 function chaseCityRoute(i0, j0, di0, dj0) {
-  const NX = CITY_XS.length, NZ = CITY_ZS.length, ok = (i, j) => i >= 0 && i < NX && j >= 0 && j < NZ, RF = 15;
-  const nodes = [[i0, j0]]; let i = i0 + di0, j = j0 + dj0, di = di0, dj = dj0; nodes.push([i, j]);
-  for (let k = 0; k < 60; k++) {
-    const cand = [[di, dj, .55], [dj, -di, .225], [-dj, di, .225]].filter(c => ok(i + c[0], j + c[1])), tot = cand.reduce((a, c) => a + c[2], 0);
-    let r = Math.random() * tot, pick = cand[0]; for (const c of cand) { r -= c[2]; if (r <= 0) { pick = c; break; } }
-    di = pick[0]; dj = pick[1]; i += di; j += dj; nodes.push([i, j]);
+  const NX = CITY_XS.length, NZ = CITY_ZS.length, ok = (i, j) => i >= 0 && i < NX && j >= 0 && j < NZ, RF = 15, DL = 2.4, SH = CITY_LANE;
+  const X = e => CITY_XS[e.i], Z = e => CITY_ZS[e.j];
+  const chooseOut = (e, forceStraight) => {
+    const [di, dj] = e.inn, cand = [[di, dj, .55], [dj, -di, .225], [-dj, di, .225]].filter((c, k) => ok(e.i + c[0], e.j + c[1]) && (!forceStraight || k === 0));
+    const tot = cand.reduce((a, c) => a + c[2], 0); let r = Math.random() * tot, pick = cand[0]; for (const c of cand) { r -= c[2]; if (r <= 0) { pick = c; break; } }
+    e.out = [pick[0], pick[1]];
+  };
+  // 1) 交点の乱数歩き。外周道路(反時計まわり)の高架ランプの手前では、ときどきランプで高架へ上がり、降りるランプから外周道路に戻る
+  const ent = [{ i: i0, j: j0, inn: [di0, dj0], out: [di0, dj0] }];
+  const sJoinOf = rp => pathProject(DECK, rp.pts[rp.n - 1][0], rp.pts[rp.n - 1][1]).s, sOffOf = rp => pathProject(DECK, rp.pts[0][0], rp.pts[0][1]).s;
+  for (let n = 0; n < 44; n++) {
+    const cur = ent[ent.length - 1], [odi, odj] = cur.out;
+    const onIdx = (cur.i === 1 && cur.j === 4 && odi === 1 && odj === 0) ? 1 : (cur.i === 4 && cur.j === 0 && odi === -1 && odj === 0) ? 3 : -1;
+    if (onIdx >= 0 && !ent.some(q => q.ramp) && Math.random() < .6) {
+      const offs = [0, 2].map(k => ({ k, dist: (((sOffOf(RAMPS[k]) - sJoinOf(RAMPS[onIdx])) % DECK.len) + DECK.len) % DECK.len }));
+      const cs = offs.map(o => ({ k: o.k, dist: o.dist < 150 ? o.dist + DECK.len : o.dist })), ex = cs[Math.floor(Math.random() * 2)];
+      cur.ramp = { onIdx, offIdx: ex.k, dist: ex.dist + (Math.random() < .1 ? DECK.len : 0) };
+      const west = ex.k === 0, e = { i: west ? 0 : 5, j: west ? 3 : 1, inn: west ? [0, 1] : [0, -1], afterRamp: true }; chooseOut(e, true); ent.push(e); continue;
+    }
+    const e = { i: cur.i + odi, j: cur.j + odj, inn: [odi, odj] }; chooseOut(e, false); ent.push(e);
   }
-  const X = k => CITY_XS[nodes[k][0]], Z = k => CITY_ZS[nodes[k][1]], dirOf = (a, b) => { const dx = X(b) - X(a), dz = Z(b) - Z(a), l = Math.hypot(dx, dz); return [dx / l, dz / l]; };
-  const pts = [[X(0) - dirOf(0, 1)[0] * 20, Z(0) - dirOf(0, 1)[1] * 20]], nodeIdx = [], turns = [];
-  const lineTo = (x, z) => { const p = pts[pts.length - 1], len = Math.hypot(x - p[0], z - p[1]), n = Math.max(1, Math.ceil(len / 3)); for (let q = 1; q <= n; q++) pts.push([p[0] + (x - p[0]) * q / n, p[1] + (z - p[1]) * q / n]); };
-  for (let k = 0; k < nodes.length; k++) {
-    const cx = X(k), cz = Z(k), last = k === nodes.length - 1;
-    const inn = k > 0 ? dirOf(k - 1, k) : dirOf(0, 1), out = last ? inn : dirOf(k, k + 1), turn = !last && k > 0 && (Math.abs(inn[0] - out[0]) > .01 || Math.abs(inn[1] - out[1]) > .01);
-    if (!turn) { lineTo(cx, cz); nodeIdx.push(pts.length - 1); continue; }
-    lineTo(cx - inn[0] * RF, cz - inn[1] * RF); const iA = pts.length - 1, A = pts[iA];
-    const cross = inn[0] * out[1] - inn[1] * out[0];                                      // 符号つきの回り方(+:左折 / -:右折。x東・z南の座標で向きの角が増えるほう=左)
-    for (let q = 1; q <= 12; q++) { const ph = Math.PI / 2 * q / 12; pts.push([A[0] + (Math.sin(ph) * inn[0] + (1 - Math.cos(ph)) * out[0]) * RF, A[1] + (Math.sin(ph) * inn[1] + (1 - Math.cos(ph)) * out[1]) * RF]); }
-    turns.push({ iA, iB: pts.length - 1, left: cross < 0 }); nodeIdx.push(iA + 6);
+  // 2) 中心線の点列にする(地上=道路の中心 / ランプ・高架=自車の車線d=3.5が重なるよう右へ3.5mずらした線)。点ごとに種別kind(0地上 1ランプ 2高架)と高さyも持つ
+  const pts = [], kind = [], yy = [], turns = [], nodeIdx = [], tmp = { x: 0, z: 0, h: 0 }; let deckEnd = -1;
+  const add = (x, z, k, y) => { pts.push([x, z]); kind.push(k); yy.push(y); };
+  const lineTo = (x, z, k = 0, y = 0) => { const p = pts[pts.length - 1], len = Math.hypot(x - p[0], z - p[1]), n = Math.max(1, Math.ceil(len / 3)); for (let q = 1; q <= n; q++) add(p[0] + (x - p[0]) * q / n, p[1] + (z - p[1]) * q / n, k, y); };
+  add(X(ent[0]) - ent[0].out[0] * 20, Z(ent[0]) - ent[0].out[1] * 20, 0, 0);
+  for (let k = 0; k < ent.length; k++) {
+    const e = ent[k], cx = X(e), cz = Z(e), last = k === ent.length - 1, inn = e.inn, out = e.out, turn = !last && k > 0 && (Math.abs(inn[0] - out[0]) > .01 || Math.abs(inn[1] - out[1]) > .01);
+    if (!turn) { lineTo(cx, cz); nodeIdx.push(pts.length - 1); }
+    else {
+      lineTo(cx - inn[0] * RF, cz - inn[1] * RF); const iA = pts.length - 1, A = pts[iA];
+      const cross = inn[0] * out[1] - inn[1] * out[0];
+      for (let q = 1; q <= 12; q++) { const ph = Math.PI / 2 * q / 12; add(A[0] + (Math.sin(ph) * inn[0] + (1 - Math.cos(ph)) * out[0]) * RF, A[1] + (Math.sin(ph) * inn[1] + (1 - Math.cos(ph)) * out[1]) * RF, 0, 0); }
+      turns.push({ iA, iB: pts.length - 1, left: cross < 0 }); nodeIdx.push(iA + 6);
+    }
+    if (e.ramp) {
+      const on = RAMPS[e.ramp.onIdx], off = RAMPS[e.ramp.offIdx], sJ = sJoinOf(on), iR = pts.length;
+      let q = pathAt(on, 0, -SH, tmp); lineTo(q.x, q.z, 0, 0);
+      turns.push({ iA: pts.length - 1, iB: pts.length - 1, left: false });
+      for (let u = 2; u < on.len; u += 2) { q = pathAt(on, u, -SH, tmp); add(q.x, q.z, 1, on.y(u)); }
+      q = pathAt(on, on.len, -SH, tmp); add(q.x, q.z, 1, on.y(on.len));
+      for (let u = sJ + 2; u <= sJ + e.ramp.dist; u += 2) { q = pathAt(DECK, u, -(SH - DL), tmp); add(q.x, q.z, 2, HW_H); }
+      deckEnd = pts.length - 1;
+      for (let u = 0; u <= off.len; u += 2) { q = pathAt(off, u, -SH, tmp); add(q.x, q.z, 1, off.y(u)); }
+    }
   }
-  const P = mkPath(pts, false);
-  return { P, turns: turns.map(t => ({ s0: P.S[t.iA], s1: P.S[t.iB], left: t.left })), nodes: nodeIdx.map((ix, k) => ({ s: P.S[ix], x: X(k), z: Z(k) })) };
+  for (let pass = 0; pass < 3; pass++) { const c = pts.map(p => p.slice()); for (let i = 1; i < pts.length - 1; i++) { pts[i][0] = (c[i - 1][0] + 2 * c[i][0] + c[i + 1][0]) / 4; pts[i][1] = (c[i - 1][1] + 2 * c[i][1] + c[i + 1][1]) / 4; } }   // つなぎ目の小さなずれ(0.6mほど)をなだらかにする
+  const P = mkPath(pts, false); P.kind = kind; P.Y = yy; P.deckEndS = deckEnd >= 0 ? P.S[deckEnd] : -1;
+  return { P, turns: turns.map(t => ({ s0: P.S[t.iA], s1: P.S[t.iB] + (t.iA === t.iB ? 30 : 0), left: t.left })), nodes: nodeIdx.map((ix, k) => ({ s: P.S[ix], x: X(ent[k]), z: Z(ent[k]) })) };
 }
 function chaseCityStart() {
   if (cityLevel(car).zone !== 'ground') { popup('地上の道路で追跡できます(高架・ランプは未対応)'); return null; }
@@ -2198,9 +2226,11 @@ function chaseNear(E) {                                  // 犯人の近くの�
   const out = CHASE.near; out.length = 0; let k = 0;
   const push = (rel, d, vs, l) => { const o = chasePool[k] || (chasePool[k] = {}); k++; o.rel = rel; o.d = d; o.vs = vs; o.l = l; out.push(o); };
   if (!CHASE.city) { for (const o of traffic) if (o.active) push(o.s - E.s, o.d, o.vs, o.l); return out; }
-  const P = CHASE.P, i0 = idxAt(P, E.s - 40), i1 = Math.min(P.n - 1, idxAt(P, E.s + 280) + 1);
+  const P = CHASE.P, i0 = idxAt(P, E.s - 40), i1 = Math.min(P.n - 1, idxAt(P, E.s + 280) + 1), yS = P.Y[Math.min(P.n - 1, i0 + 14)];
+  if (yS > 1 && yS < HW_H - 1) return out;                                              // ランプの途中(地上とも高架とも別の高さ)は、周りの車を見ない
+  const onDeck = yS >= HW_H - 1;
   for (const t of traffic) {
-    if (!t.active || t.parked) continue;
+    if (!t.active || t.parked || !!(t.city && t.city.mode === 'deck') !== onDeck) continue;   // 高架の車と地上の車は、高さがちがうので別々に見る
     if (Math.abs(t.x - CHASE.sx) > 300 || Math.abs(t.z - CHASE.sz) > 300) continue;
     let bi = -1, bd = 1e18; for (let i = i0; i <= i1; i++) { const ex = t.x - P.pts[i][0], ez = t.z - P.pts[i][1], d2 = ex * ex + ez * ez; if (d2 < bd) { bd = d2; bi = i; } }
     if (bd > 144) continue;
@@ -2222,12 +2252,13 @@ function chaseCrossCap(E, v) {                           // 交差点に横か�
   return 1e9;
 }
 function chaseSuspectStep(dt) {
-  const E = CHASE.st, v = E.v, city = CHASE.city, P = CHASE.P, cl = city ? CITY_LANE : 0;
+  const E = CHASE.st, v = E.v, city = CHASE.city, P = CHASE.P, cl = city ? CITY_LANE : 0, ci = city ? idxAt(P, E.s) : 0, kd = city ? P.kind[ci] : 0;   // kd: 0地上 1ランプ 2高架
   // カーブ: 先の曲率(走る車線の位置も考えた実際の半径)から、そこで出せる速さ(横G上限)に間に合うよう手前から減速する
-  let vLim = CHASE.vmax * lerpTable(CHASE.pace, CHASE.gapNow); const reach = v * v / (2 * CHASE.brakeDec) + 40;
+  let vLim = (kd === 2 ? CHASE.vmaxDeck : CHASE.vmax) * lerpTable(CHASE.pace, CHASE.gapNow); const reach = v * v / (2 * CHASE.brakeDec) + 40;
   for (let a = 0; a <= reach; a += city ? 6 : 15) { const k = city ? cityK(P, E.s + a) : centerAt(E.s + a, _cs).k; if (Math.abs(k) > 1e-5) { const ke = Math.abs(k) / Math.max(.35, 1 - k * E.dT), vA = Math.sqrt(CHASE.ayLim / ke); vLim = Math.min(vLim, Math.sqrt(vA * vA + 2 * CHASE.brakeDec * a)); } }
   // 前の車: 各車線で「いま出せる速さ」を比べ、いちばん速く走れる車線へ素早く移る。左右とも詰まっていて空きがなければ、対向車線に出て追い越し、追い越したら元の車線へ戻る
-  const near = chaseNear(E), look = Math.max(city ? 60 : 80, v * (city ? 2 : 2.4)), same = city ? [{ d: cl, dir: 1 }] : LANES.filter(l => l.dir > 0), opp = city ? { d: -cl, dir: -1 } : LANES.find(l => l.dir < 0 && l.d > -3);
+  // look: 前を見る距離。止まれるまでの距離(いまの速さから5.5m/s²で減速)より長くとる
+  const near = chaseNear(E), look = Math.max(city ? 60 : 80, v * (city ? 2 : 2.4), v * v / (2 * 5.5) + 30), same = city ? (kd === 2 ? [{ d: cl + 0.3, dir: 1 }, { d: cl - 5.1, dir: 1 }] : [{ d: cl, dir: 1 }]) : LANES.filter(l => l.dir > 0), opp = city ? (kd === 0 ? { d: -cl, dir: -1 } : null) : LANES.find(l => l.dir < 0 && l.d > -3);
   const ahead = ld => { let gap = 1e9, vl = 1e9; for (const o of near) { if (Math.abs(o.d - ld) > 2.3 || o.rel <= -2) continue; const g = o.rel - (o.l + 4.7) / 2; if (g < gap) { gap = g; vl = Math.max(0, o.vs); } } return { gap, vl }; };
   const sideClear = ld => {                                                              // その車線へ移れるか: 真横にいない / 追いついてしまう遅い車がいない / 後ろから来る速い車にぶつけられない
     for (const o of near) { if (Math.abs(o.d - ld) > 2.4) continue; const rel = o.rel;
@@ -2237,6 +2268,8 @@ function chaseSuspectStep(dt) {
     return true;
   };
   const lanesAll = same.concat(opp ? [opp] : []);
+  if (city && !lanesAll.some(l => Math.abs(l.d - E.dT) < .4)) E.dT = lanesAll.reduce((b, l) => Math.abs(l.d - E.dT) < Math.abs(b.d - E.dT) ? l : b).d;   // 道の種類が変わったら、そこの車線へ
+  if (kd === 2 && P.deckEndS > 0 && P.deckEndS - E.s < 170 && Math.abs(E.dT - same[0].d) > .3 && sideClear(same[0].d)) { E.dT = same[0].d; CHASE.laneCd = 1.5; }   // 降りるランプの手前では、内側の車線へ寄る
   const crossOK = ld => lanesAll.every(l => !(l.d > Math.min(E.d, ld) + .5 && l.d < Math.max(E.d, ld) - .5) || sideClear(l.d));   // 途中で横切る車線にも、ぶつかる車がいないこと
   const speedPot = r => r.gap >= look ? vLim : Math.min(vLim, Math.sqrt(r.vl * r.vl + 2 * 6.5 * Math.max(0, r.gap - 7)));
   let td = 1e9; if (city) for (const T of CHASE.turns) if (T.s1 > E.s) { td = Math.max(0, T.s0 - E.s); break; }      // 次の曲がり角までの距離
@@ -2261,7 +2294,7 @@ function chaseSuspectStep(dt) {
   for (const r of [me, ahead(E.d)]) if (r.gap < look) vT = Math.min(vT, Math.sqrt(r.vl * r.vl + 2 * 6.5 * Math.max(0, r.gap - 7)));   // 車線を移っている最中は、いまいる車線と移る先の両方の前の車に合わせる
   if (city) vT = Math.min(vT, chaseCrossCap(E, v));
   let q, kappa, px, pz, py = 0, slope = 0;
-  if (city) { q = pathAt(P, E.s, E.d, _qA); kappa = cityK(P, E.s); px = q.x; pz = q.z; }
+  if (city) { q = pathAt(P, E.s, E.d, _qP); kappa = cityK(P, E.s); px = q.x; pz = q.z; const i1 = Math.min(P.n - 1, ci + 1), f = (E.s - P.S[ci]) / Math.max(.01, P.S[i1] - P.S[ci]); py = P.Y[ci] + (P.Y[i1] - P.Y[ci]) * clamp(f, 0, 1); slope = (P.Y[i1] - P.Y[ci]) / Math.max(.01, P.S[i1] - P.S[ci]); }
   else { q = centerAt(E.s, _cs); kappa = q.k; px = q.x + Math.cos(q.h) * E.d; pz = q.z - Math.sin(q.h) * E.d; py = q.y; slope = q.sl || 0; }
   const qh = q.h;
   gtrDrive(E, dt, kappa, 'chase', vT);
@@ -2272,6 +2305,7 @@ function chaseSuspectStep(dt) {
   CHASE.hed = hed; CHASE.sx = px; CHASE.sy = py; CHASE.sz = pz;
 }
 function chaseCheckHit() {
+  if (CHASE.city && Math.abs((car.y || 0) - CHASE.sy) > 1.8) return false;                // 高架とその下の道路など、高さがちがう時はぶつからない
   const E = CHASE.st, c = car, Fx = Math.sin(c.h), Fz = Math.cos(c.h), hed = CHASE.hed, m = CHASE.mesh.group.position;
   const tfx = Math.sin(hed), tfz = Math.cos(hed), tlx = Math.cos(hed), tlz = -Math.sin(hed), hx = .96, hl = 2.35, R = PLAYER.hit.r;
   for (const off of [PLAYER.hit.off, -PLAYER.hit.off]) {
@@ -2288,7 +2322,7 @@ function chaseCheckHit() {
 function chaseStep(dt) {
   if (!CHASE.on) return;
   CHASE.t += dt; CHASE.hitMsgT = Math.max(0, CHASE.hitMsgT - dt); lbUpdate(dt);
-  const sub = Math.max(1, Math.ceil(dt * 45)); for (let i = 0; i < sub; i++) { CHASE.gapNow = CHASE.city ? Math.hypot(CHASE.sx - car.x, CHASE.sz - car.z) : CHASE.st.s - car.s; chaseSuspectStep(dt / sub); }   // フレームが遅い端末でも、犯人の運転が荒れないよう細かく刻む
+  const sub = Math.max(1, Math.ceil(dt * 45)); for (let i = 0; i < sub; i++) { CHASE.gapNow = CHASE.city ? Math.hypot(CHASE.sx - car.x, CHASE.sz - car.z, ((CHASE.sy || 0) - (car.y || 0)) * 2) : CHASE.st.s - car.s; chaseSuspectStep(dt / sub); }   // フレームが遅い端末でも、犯人の運転が荒れないよう細かく刻む
   const gap = CHASE.gapNow;
   if (chaseCheckHit()) {
     const t = CHASE.t, ms = Math.round((t % 1) * 100);
@@ -4023,7 +4057,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; }, get weather() { return weather; }, set weather(v) { weather = v; updateSky(true); }, wxGrip, CHASE, chaseToggle, chaseStep, lbLoad, gtrTryStart, gtrEnd, get gtrEv() { return gtrEv; }, gtrMesh };
+window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; }, get weather() { return weather; }, set weather(v) { weather = v; updateSky(true); }, wxGrip, CHASE, chaseToggle, chaseStep, chaseCityRoute, lbLoad, gtrTryStart, gtrEnd, get gtrEv() { return gtrEv; }, gtrMesh };
 </script>
 </body>
 </html>

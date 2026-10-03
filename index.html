@@ -109,10 +109,13 @@
   #tcBase span{position:absolute;font-size:13px;font-weight:800;color:rgba(255,255,255,.55)}
   #tcKnob{position:absolute;width:68px;height:68px;border-radius:50%;left:calc(50% - 37px);top:calc(50% - 37px);background:rgba(255,255,255,.62);box-shadow:0 2px 8px rgba(0,0,0,.45);pointer-events:none}
   #tcBtns{position:absolute;right:calc(14px + env(safe-area-inset-right));bottom:calc(128px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(3,60px);gap:6px;pointer-events:none}
-  #tcBtns .tb{position:static;height:40px;font-size:12px;border-radius:10px}
+  #tcBtns .tb{position:static;height:33px;font-size:12px;border-radius:10px}
   #tcBtns .big{position:fixed;width:84px;height:84px;border-radius:50%;font-size:14px}
-  #tcNitro{right:calc(14px + env(safe-area-inset-right));bottom:calc(30px + env(safe-area-inset-bottom));background:rgba(60,170,255,.38)!important}
-  #tcDrift{right:calc(108px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));background:rgba(255,170,60,.34)!important}
+  #tcBase.h .v{display:none}
+  #tcBrake{right:calc(14px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom));width:100px!important;height:100px!important;background:rgba(230,70,70,.42)!important;font-size:16px!important}
+  #tcNitro{right:calc(124px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom));background:rgba(60,170,255,.38)!important}
+  #tcDrift{right:calc(218px + env(safe-area-inset-right));bottom:calc(22px + env(safe-area-inset-bottom));background:rgba(255,170,60,.34)!important}
+  #tcBtns{bottom:calc(132px + env(safe-area-inset-bottom))!important}
   #tcEsc{right:calc(14px + env(safe-area-inset-right));top:14px;width:90px;height:40px;font-size:13px}
   #rot{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;font-size:20px;font-weight:700;text-align:center;line-height:1.8}
   @media (orientation:portrait){ body.touch #rot{display:flex} }
@@ -149,7 +152,7 @@
     <p id="modeDesc" style="font-size:13px;opacity:.8;margin-top:2px"></p>
     <div class="courses"><button data-course="public"><kbd>1</kbd>公道(無限ワインディング)</button><button data-course="tsukuba"><kbd>2</kbd>筑波サーキット(周回・ラップ計測)</button><button data-course="straight"><kbd>3</kbd>ベタ踏み直線(カーブなし)</button><button data-course="city"><kbd>4</kbd>都市マップ(信号・駐車・合流)</button><button data-course="smash"><kbd>5</kbd>破壊ステージ(障害物と地雷を壊しまくる)</button></div>
     <p id="courseDesc" style="font-size:13px;opacity:.8"></p>
-    <p class="touchOnly" style="font-size:12px;opacity:.85">遊び方: 左下のスティックを倒す(左右=ハンドル、上=アクセル、下=ブレーキ)　右下のボタンでニトロ・ドリフト・視点など</p>
+    <p class="touchOnly" style="font-size:12px;opacity:.85">遊び方: アクセルは自動。左下のスティックでハンドル、右下の赤いボタンでブレーキ、青でニトロ(自動アクセルは右側のボタンでOFFにできます)</p>
     <div class="keys">
       <div style="opacity:.85">スタート画面:　<kbd>A</kbd><kbd>D</kbd>コース選択　<kbd>W</kbd><kbd>S</kbd>車種選択　<kbd>Enter</kbd>/<kbd>Space</kbd>スタート</div>
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
@@ -1195,7 +1198,7 @@ if (TOUCH) {
   document.body.classList.add('touch');
   addEventListener('contextmenu', e => e.preventDefault());
   const root = document.createElement('div'); root.id = 'tc';
-  root.innerHTML = '<div id="tcZone"><div id="tcBase"><span style="left:calc(50% - 5px);top:5px">▲</span><span style="left:calc(50% - 5px);bottom:5px">▼</span><span style="left:7px;top:calc(50% - 8px)">◀</span><span style="right:7px;top:calc(50% - 8px)">▶</span><div id="tcKnob"></div></div></div><div id="tcBtns"></div><div class="tb" id="tcEsc" style="display:none">リプレイ終了</div>';
+  root.innerHTML = '<div id="tcZone"><div id="tcBase"><span class="v" style="left:calc(50% - 5px);top:5px">▲</span><span class="v" style="left:calc(50% - 5px);bottom:5px">▼</span><span style="left:7px;top:calc(50% - 8px)">◀</span><span style="right:7px;top:calc(50% - 8px)">▶</span><div id="tcKnob"></div></div></div><div id="tcBtns"></div><div class="tb" id="tcEsc" style="display:none">リプレイ終了</div>';
   document.body.appendChild(root);
   const fire = (code, type) => dispatchEvent(new KeyboardEvent(type, { code }));
   const hold = (el, down, up) => {
@@ -1203,18 +1206,27 @@ if (TOUCH) {
     const end = () => { if (el.classList.contains('act')) { el.classList.remove('act'); up(); } };
     el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); el.addEventListener('lostpointercapture', end);
   };
-  // スティック(Switchのコントローラーのように、丸を上下左右へ倒す): 左右=ハンドル(倒した量で切れ角が変わる) / 上=アクセル / 下=ブレーキ・バック。触った場所へスティックが移る
+  // スティック(Switchのコントローラーのように、丸を倒す): 左右=ハンドル(倒した量で切れ角が変わる)。自動アクセルON(標準)の間は、アクセルは自動で踏みっぱなし・ブレーキは右手のボタン。OFFなら 上=アクセル / 下=ブレーキ。触った場所へスティックが移る
+  let autoAcc = true; try { autoAcc = localStorage.getItem('autoAcc') !== '0'; } catch (_) {}
+  let brakeHeld = 0, stickY = 0;
   const zone = $('tcZone'), base = $('tcBase'), knob = $('tcKnob'), RB = 62;
+  const syncPedals = () => {
+    const play = state === 'play' && !replay.active;
+    keys.up = play && (autoAcc ? (!brakeHeld && PP.state !== 'on' ? 1 : 0) : (stickY < -.3 ? 1 : 0)) ? 1 : 0;     // ProPILOT作動中は自動アクセルを止める(アクセルを踏むと運転手の操作に戻ってしまうため)
+    keys.down = brakeHeld || (!autoAcc && stickY > .3) ? 1 : 0;
+    base.classList.toggle('h', autoAcc);
+  };
   let stickId = null, scx = 0, scy = 0;
   const applyStick = (dx, dy) => {
+    if (autoAcc) dy = 0;
     const len = Math.hypot(dx, dy); if (len > RB) { dx *= RB / len; dy *= RB / len; }
     knob.style.transform = `translate(${dx}px,${dy}px)`;
-    const nx = dx / RB, ny = dy / RB, m = Math.max(0, Math.abs(nx) - .1) / .9;
+    const nx = dx / RB, m = Math.max(0, Math.abs(nx) - .1) / .9; stickY = dy / RB;
     touchIn.steer = m ? -Math.sign(nx) * Math.pow(m, 1.25) : 0;
     keys.left = nx < -.3 ? 1 : 0; keys.right = nx > .3 ? 1 : 0;                 // ProPILOTの車線変更タップなど、キー入力を見ている処理のため
-    keys.up = ny < -.3 ? 1 : 0; keys.down = ny > .3 ? 1 : 0;
+    syncPedals();
   };
-  const endStick = () => { stickId = null; touchIn.steer = null; keys.left = keys.right = keys.up = keys.down = 0; knob.style.transform = ''; base.style.left = base.style.bottom = ''; };
+  const endStick = () => { stickId = null; stickY = 0; touchIn.steer = null; keys.left = keys.right = 0; knob.style.transform = ''; base.style.left = base.style.bottom = ''; syncPedals(); };
   zone.addEventListener('pointerdown', e => {
     if (stickId !== null) return; e.preventDefault(); e.stopPropagation(); stickId = e.pointerId; try { zone.setPointerCapture(e.pointerId); } catch (_) {}
     const r = zone.getBoundingClientRect();
@@ -1224,15 +1236,18 @@ if (TOUCH) {
   zone.addEventListener('pointermove', e => { if (e.pointerId === stickId) applyStick(e.clientX - scx, e.clientY - scy); });
   const upStick = e => { if (e.pointerId === stickId) endStick(); };
   zone.addEventListener('pointerup', upStick); zone.addEventListener('pointercancel', upStick); zone.addEventListener('lostpointercapture', upStick);
+  const mkBtn = (label, cls, id) => { const b = document.createElement('div'); b.className = 'tb' + (cls ? ' ' + cls : ''); if (id) b.id = id; b.textContent = label; $('tcBtns').appendChild(b); b.style.pointerEvents = 'auto'; return b; };
+  hold(mkBtn('ブレーキ', 'big', 'tcBrake'), () => { brakeHeld = 1; syncPedals(); }, () => { brakeHeld = 0; syncPedals(); });
   const btns = [['ニトロ', () => 'ShiftLeft', 1, 'tcNitro'], ['ドリフト', () => 'Space', 1, 'tcDrift'], ['視点', () => 'KeyC'], ['ProPILOT', () => 'KeyP'], ['復帰', () => 'KeyR'], ['モード', () => 'KeyQ'], ['回生', () => hasEPedal() ? 'KeyE' : 'KeyB'], ['天候', () => 'KeyF']];
   for (const [label, code, isHold, bigId] of btns) {
-    const b = document.createElement('div'); b.className = 'tb' + (bigId ? ' big' : ''); if (bigId) b.id = bigId; b.textContent = label; $('tcBtns').appendChild(b); b.style.pointerEvents = 'auto';
+    const b = mkBtn(label, bigId ? 'big' : '', bigId);
     let cur = null;
     hold(b, () => { cur = code(); fire(cur, 'keydown'); if (!isHold) { fire(cur, 'keyup'); cur = null; } }, () => { if (cur) fire(cur, 'keyup'); cur = null; });
   }
+  { const b = mkBtn('自動アクセル ' + (autoAcc ? 'ON' : 'OFF'), '', 'tcAuto'); b.style.gridColumn = 'span 3'; hold(b, () => { autoAcc = !autoAcc; try { localStorage.setItem('autoAcc', autoAcc ? '1' : '0'); } catch (_) {} b.textContent = '自動アクセル ' + (autoAcc ? 'ON' : 'OFF'); syncPedals(); }, () => {}); }
   hold($('tcEsc'), () => fire('Escape', 'keydown'), () => fire('Escape', 'keyup'));
   $('touchGo').addEventListener('click', e => { e.stopPropagation(); if (state === 'ready') startGame(); });
-  setInterval(() => { root.classList.toggle('on', state === 'play' || replay.active); $('tcEsc').style.display = replay.active ? 'flex' : 'none'; $('tcBtns').style.display = zone.style.display = replay.active ? 'none' : ''; }, 120);
+  setInterval(() => { root.classList.toggle('on', state === 'play' || replay.active); $('tcEsc').style.display = replay.active ? 'flex' : 'none'; $('tcBtns').style.display = zone.style.display = replay.active ? 'none' : ''; syncPedals(); }, 60);
 }
 
 

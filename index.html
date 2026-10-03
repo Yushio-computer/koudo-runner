@@ -119,12 +119,16 @@
   #tcEsc{right:calc(14px + env(safe-area-inset-right));top:14px;width:90px;height:40px;font-size:13px}
   #rot{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;font-size:20px;font-weight:700;text-align:center;line-height:1.8}
   @media (orientation:portrait){ body.touch #rot{display:flex} }
+  #chase{left:50%;top:92px;transform:translateX(-50%);display:none;min-width:190px;padding:6px 16px;border-radius:10px;text-align:center;font-size:14px;font-weight:700;line-height:1.5;background:rgba(120,10,10,.55);border:2px solid rgba(255,90,90,.7)}
+  #chase b{display:block;font-size:15px;letter-spacing:.1em;color:#ff9a9a}
+  #chaseTag{position:fixed;left:0;top:0;display:none;pointer-events:none;z-index:6;font-size:15px;font-weight:900;color:#fff;background:rgba(200,20,20,.8);border-radius:8px;padding:2px 10px;white-space:nowrap;text-shadow:none}
 </style>
 </head>
 <body>
 <canvas id="gl"></canvas>
 <canvas id="fx"></canvas>
 <div id="flash"></div>
+<div id="chaseTag"></div>
 <canvas id="mini" width="200" height="200"></canvas>
 <div id="hud">
   <div id="pos"></div>
@@ -136,6 +140,7 @@
   <div id="tr"><div>DIST <b id="dist">0.0</b> km</div><div class="bar"><i id="hp" style="width:100%"></i></div><div style="font-size:11px">車体</div></div>
   <div id="br"><span id="spd">0</span><small>km/h</small><div id="gear">D</div><div class="bar" style="width:200px;margin-left:auto"><i id="rpm"></i></div><div id="rpmLabel" style="font-size:11px">モーター出力</div><div id="hyInfo" style="font-size:12px;line-height:1.35;opacity:.95;max-width:340px;margin-left:auto;text-align:right"></div><div id="battWrap"><div class="bar" style="width:200px;margin-left:auto"><i id="batt"></i></div><div style="font-size:11px">バッテリー</div></div></div>
   <div id="bc"><div class="bar"><i id="nit" style="width:100%"></i></div>NITRO&nbsp;[Shift]<br><span style="opacity:.8">発動中は車を貫通・時間とすり抜けで回復</span></div>
+  <div id="chase"><b>追跡中</b><div>残り <span id="chaseT">0:00</span></div><div>犯人まで <span id="chaseD">0 m</span></div><div>犯人 <span id="chaseV">0 km/h</span></div></div>
   <div id="pp"></div>
   <div id="pop"></div>
 </div>
@@ -158,6 +163,7 @@
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
       <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
       <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)　<kbd>F</kbd>天候切替(晴れ/雨/霧)</div>
+      <div style="opacity:.85"><kbd>K</kbd>追跡モード(公道): パトライトを載せて犯人の車を追い、体当たりで確保!</div>
       <div style="opacity:.85">衝突・急ブレーキをすると右下に📷が出ます。押すとその場面をリプレイ(<kbd>Esc</kbd>で戻る)</div>
       <div style="opacity:.85">ProPILOT作動中、前の車に詰まって「追い越しますか?」と出たら<kbd>A</kbd>を軽くタップで追越車線へ(車線変更支援)。戻るときは<kbd>D</kbd>。長押しすると今まで通り手動運転</div>
       <div style="opacity:.85">ProPILOT作動中に事故(巻き込みなど)が起きると、警告音とハザードを出しながら自動で緊急停車します</div>
@@ -1163,6 +1169,7 @@ addEventListener('keydown', e => {
   if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = 1; e.preventDefault(); }
   if (e.repeat) return;
   if (e.code === 'KeyC') camMode = 1 - camMode;
+  if (e.code === 'KeyK') chaseToggle();
   if (e.code === 'KeyP') ppToggle();
   if ((e.code === 'Digit1' || e.code === 'Numpad1') && (state === 'ready' || state === 'over')) setCourse('public');
   if ((e.code === 'Digit2' || e.code === 'Numpad2') && (state === 'ready' || state === 'over')) setCourse('tsukuba');
@@ -1238,7 +1245,7 @@ if (TOUCH) {
   zone.addEventListener('pointerup', upStick); zone.addEventListener('pointercancel', upStick); zone.addEventListener('lostpointercapture', upStick);
   const mkBtn = (label, cls, id) => { const b = document.createElement('div'); b.className = 'tb' + (cls ? ' ' + cls : ''); if (id) b.id = id; b.textContent = label; $('tcBtns').appendChild(b); b.style.pointerEvents = 'auto'; return b; };
   hold(mkBtn('ブレーキ', 'big', 'tcBrake'), () => { brakeHeld = 1; syncPedals(); }, () => { brakeHeld = 0; syncPedals(); });
-  const btns = [['ニトロ', () => 'ShiftLeft', 1, 'tcNitro'], ['ドリフト', () => 'Space', 1, 'tcDrift'], ['視点', () => 'KeyC'], ['ProPILOT', () => 'KeyP'], ['復帰', () => 'KeyR'], ['モード', () => 'KeyQ'], ['回生', () => hasEPedal() ? 'KeyE' : 'KeyB'], ['天候', () => 'KeyF']];
+  const btns = [['ニトロ', () => 'ShiftLeft', 1, 'tcNitro'], ['ドリフト', () => 'Space', 1, 'tcDrift'], ['視点', () => 'KeyC'], ['追跡', () => 'KeyK'], ['ProPILOT', () => 'KeyP'], ['復帰', () => 'KeyR'], ['モード', () => 'KeyQ'], ['回生', () => hasEPedal() ? 'KeyE' : 'KeyB'], ['天候', () => 'KeyF']];
   for (const [label, code, isHold, bigId] of btns) {
     const b = mkBtn(label, bigId ? 'big' : '', bigId);
     let cur = null;
@@ -1826,7 +1833,7 @@ function updateLap(dt) {
   lapIdx = idx;
 }
 function restart() {
-  resetDestruction(); resetWear(); replayReset();
+  chaseEnd(true); resetDestruction(); resetWear(); replayReset();
   score = 0; dist = 0; combo = 0; comboT = 0; maxKmh = 0; overT = 0; car.health = 100; car.nitro = 1; car.batt = battInit(); car.gen = 0; resetHy(); car.charging = false; car.assist = false; car.dead = false; car.deadT = 0;
   placeCar(courseStartS(), 1.8, 0); initTraffic(); resetLaps();
   $('ovOver').classList.remove('on');
@@ -1838,7 +1845,7 @@ function refreshCourseUI() {
   $('courseDesc').textContent = COURSE_DESC[course];
 }
 function setCourse(name) {                              // コース切り替え: 道路・木・交通・自車位置を作り直して待機画面へ
-  damagedChunks.clear(); resetDestruction(); resetWear(); replayReset(); gtrEnd();
+  chaseEnd(true); damagedChunks.clear(); resetDestruction(); resetWear(); replayReset(); gtrEnd();
   serenaTrafficN = 0; for (const t of traffic) t._useS = false;   // セレナ台数の上限カウントを、コース切り替えのたびに数え直す(ずれを防ぐ)
   course = name; resetRoad(); setLanes();
   for (const [, ch] of chunks) { scene.remove(ch.grp); ch.geos.forEach(g => g.dispose()); ch.inst.forEach(m => m.dispose()); }
@@ -1975,8 +1982,9 @@ function gtrPhys(e, dt, steer, thr, brk) {
 function gtrDrive(e, dt, kappa, mode, cruiseV) {                                          // ドライバー: 行きたい横位置 e.dT へ向けてステア・ペダルを決める
   const agg = mode === 'drift', cosP = Math.cos(e.psi), sinP = Math.sin(e.psi);
   const sdot = (e.v * cosP - e.vy * sinP) / Math.max(.3, 1 - kappa * e.d), ddot = e.v * sinP + e.vy * cosP;
-  const pm = agg ? .5 : .2, psiDes = clamp((e.dT - e.d) * (agg ? 3.4 : 1) / e.v - ddot * (agg ? .018 : .03), -pm, pm);   // 横位置の誤差から「向けたい向き」を決める(横に速く動いているときは手前から戻す)
-  const rDes = clamp((agg ? 4.5 : 3) * (psiDes - e.psi), agg ? -1.2 : -.4, agg ? 1.2 : .4) + kappa * sdot;   // 欲しいヨーレート
+  const chs = mode === 'chase';                                                           // 追跡される犯人: 車線変更は素早く、ブレーキは強く(上手いドライバー)
+  const pm = agg ? .5 : chs ? .3 : .2, psiDes = clamp((e.dT - e.d) * (agg ? 3.4 : chs ? 1.9 : 1) / e.v - ddot * (agg ? .018 : chs ? .05 : .03), -pm, pm);   // 横位置の誤差から「向けたい向き」を決める(横に速く動いているときは手前から戻す)
+  const rDes = clamp((agg ? 4.5 : chs ? 3.6 : 3) * (psiDes - e.psi), agg ? -1.2 : chs ? -.6 : -.4, agg ? 1.2 : chs ? .6 : .4) + kappa * sdot;   // 欲しいヨーレート
   let steer = clamp(GTR_L * rDes / e.v + .16 * (rDes - e.r), -.4, .4);
   const k = clamp((Math.abs(e.slipR) - .12) / .12, 0, 1);                                  // お尻が限界を越えて流れ出したら、カウンターステア(前輪を進行方向へ向ける)
   if (k > 0) steer = steer * (1 - k) + clamp(Math.atan2(e.vy + GTR_LA * e.r, Math.max(e.v, 5)), -.4, .4) * k;
@@ -1984,7 +1992,7 @@ function gtrDrive(e, dt, kappa, mode, cruiseV) {                                
   let thr = 0, brk = 0;
   if (mode === 'brake') brk = .95;
   else {
-    const err = cruiseV - e.v; thr = clamp(err * .5, 0, 1); brk = clamp(-err * .25, 0, .4);
+    const err = cruiseV - e.v; thr = clamp(err * .5, 0, 1); brk = chs ? clamp(-err * .7, 0, .85) : clamp(-err * .25, 0, .4);
     if (agg) thr = Math.max(thr, .45) * (1 - .8 * k);                                       // 蛇行中はパワーをかけ続ける(流れたら緩める)
   }
   gtrPhys(e, dt, steer, thr, brk);
@@ -1999,7 +2007,7 @@ function gtrStep(dt) {
   if (!gtrEv) {
     if (course === 'public' || isCity()) {
       gtrCheckT -= dt;
-      if (gtrCheckT <= 0) { gtrCheckT = rnd(30, 55); if (Math.random() < GTR_SPAWN_P) gtrTryStart(); }
+      if (gtrCheckT <= 0 && !CHASE.on) { gtrCheckT = rnd(30, 55); if (Math.random() < GTR_SPAWN_P) gtrTryStart(); }
     }
     return;
   }
@@ -2050,6 +2058,154 @@ function gtrStep(dt) {
   }
   gtrMesh.tailMat.color.setHex(brk ? 0xff2a2a : 0x8a1010);
   if (E.aliveT > 22 || Math.abs(relS) > 260) gtrEnd();                 // 出てから22秒、または自車から260m離れたら消える
+}
+
+/* =====================================================================
+   追跡モード(Kキー): 屋根にパトライトを載せてサイレンを鳴らし、逃げる犯人の車に体当たりして確保する(いまは公道のみ)
+   ・犯人はGT-R。車体の力学(gtrPhys/gtrDrive)で運転する: カーブの手前で先読みして減速 / 前の車を見て空いた車線へ移る / 滑らず安定して速い
+   ・光の安全: パトライトは左右が交互に、1つの灯が毎秒1.25回(なめらかな明暗)。画面全体の明滅はしない
+   ===================================================================== */
+const CHASE = { on: false, st: null, mesh: null, t: 0, limit: 150, vmax: 49, ayLim: 9.2, brakeDec: 8, minHit: 2.8, loseDist: 550, laneCd: 0, hitMsgT: 0, endT: 0 };
+let LB = null, lbLoading = false, lbT = 0, sirenNodes = null, chaseModel = null, chaseModelLoading = false, chaseWait = [];
+const _cs = { x: 0, y: 0, z: 0, h: 0, sl: 0, k: 0 };
+function lbLoad() {
+  if (LB || lbLoading) return; lbLoading = true;
+  new GLTFLoader().load('assets/lightbar.glb', g => {
+    const grp = new THREE.Group(), inner = g.scene; inner.scale.setScalar(.72); grp.add(inner);
+    const parts = {}; inner.traverse(o => { if (o.isMesh) { parts[o.name] = o; o.material.emissive = new THREE.Color(0xff1a1a); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 0; } });
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const cg = cv.getContext('2d'), gr = cg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,60,50,1)'); gr.addColorStop(.35, 'rgba(255,40,40,.5)'); gr.addColorStop(1, 'rgba(255,0,0,0)'); cg.fillStyle = gr; cg.fillRect(0, 0, 64, 64);
+    const tex = new THREE.CanvasTexture(cv), glows = [-1, 1].map(sx => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); sp.position.set(sx * .4, .13, 0); sp.scale.setScalar(1.15); grp.add(sp); return sp; });
+    LB = { group: grp, L: parts.barL, R: parts.barR, glows }; lbLoading = false;
+    if (CHASE.on) lbAttach();
+  }, undefined, e => { lbLoading = false; console.warn('lightbar load failed', e); });
+}
+function lbAttach() {
+  if (!LB) { lbLoad(); return; }
+  const h = PLAYER.model ? PLAYER.model.userData.h : 1.5;
+  LB.group.position.set(0, h + .1, VEH.model && VEH.model.roofZ !== undefined ? VEH.model.roofZ : .05); carMesh.add(LB.group);
+}
+function lbDetach() { if (LB && LB.group.parent) LB.group.parent.remove(LB.group); }
+function lbUpdate(dt) {
+  if (!LB) return; lbT += dt;
+  const ph = lbT * Math.PI * 2 / .8, pl = Math.pow(Math.max(0, Math.sin(ph)), 2), pr = Math.pow(Math.max(0, Math.sin(ph + Math.PI)), 2);
+  LB.L.material.emissiveIntensity = .12 + 1.5 * pl; LB.R.material.emissiveIntensity = .12 + 1.5 * pr;
+  LB.glows[0].material.opacity = .85 * pl; LB.glows[1].material.opacity = .85 * pr;
+}
+function sirenStart() {
+  initAudio(); if (!ac || sirenNodes) return;
+  const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter(), lfo = ac.createOscillator(), lg = ac.createGain();
+  o.type = 'sawtooth'; o.frequency.value = 900; lfo.type = 'triangle'; lfo.frequency.value = .22; lg.gain.value = 330; lfo.connect(lg); lg.connect(o.frequency);
+  lp.type = 'lowpass'; lp.frequency.value = 2200; g.gain.value = 0; o.connect(lp); lp.connect(g); g.connect(master); o.start(); lfo.start(); g.gain.setTargetAtTime(.07, ac.currentTime, .15);
+  sirenNodes = { o, lfo, g };
+}
+function sirenStop() { if (!sirenNodes) return; const { o, lfo, g } = sirenNodes; g.gain.setTargetAtTime(0, ac.currentTime, .1); o.stop(ac.currentTime + .6); lfo.stop(ac.currentTime + .6); sirenNodes = null; }
+function chaseGetModel(cb) {
+  if (chaseModel) { cb(chaseModel); return; }
+  const rig = RIGS.gtr && RIGS.gtr.player.model; if (rig) { chaseModel = rig; cb(rig); return; }
+  chaseWait.push(cb); if (chaseModelLoading) return; chaseModelLoading = true;
+  const m = VEHICLES.gtr.model; loadCarModel(m.url, m.yaw, m.length, h => { chaseModel = h; chaseWait.splice(0).forEach(f => f(h)); });
+}
+function chaseBuildMesh() {
+  const m = makeCar({ ...VEHICLES.gtr.box, brakeable: true }); m.group.rotation.order = 'YXZ'; m.group.visible = false; scene.add(m.group);
+  const ext = m.group.children.filter(c => !c.isSprite);
+  m.tailGlows = m.group.children.filter(c => c.isSprite && c.material.color.getHexString() === 'ff3020');
+  m.group.children.filter(c => c.isSprite && c.material.color.getHexString() !== 'ff3020').forEach(g => g.visible = false);
+  chaseGetModel(h => {
+    const c = h.clone(true); c.traverse(o => { if (o.isMesh) { o.material = o.material.clone(); carEnvMats.add(o.material); } }); m.group.add(c); ext.forEach(o => o.visible = false);
+    const t = VEHICLES.gtr.model.tail; m.tailGlows.forEach((g, i) => g.position.set(i ? -t.x : t.x, t.y, -VEHICLES.gtr.model.length / 2 - .1));
+  });
+  return m;
+}
+function chaseToggle() {
+  if (CHASE.on) { chaseEnd(true); popup('追跡を終了'); return; }
+  if (state !== 'play') return;
+  if (course !== 'public') { popup('追跡モードは公道で使えます(都市は準備中)'); return; }
+  if (PP.state !== 'off') ppCancel('追跡開始', true);
+  gtrEnd();
+  const same = LANES.filter(l => l.dir > 0), free = same.filter(l => !traffic.some(o => o.active && Math.abs(o.d - l.d) < 2.4 && Math.abs(o.s - (car.s + 170)) < 45));
+  const ln = (free.length ? free : same)[Math.floor(Math.random() * (free.length ? free.length : same.length))];
+  const st = gtrNewState(ln.d, Math.max(34, Math.hypot(car.vx, car.vz) + 4)); st.s = car.s + rnd(150, 190);
+  CHASE.on = true; CHASE.st = st; CHASE.t = 0; CHASE.laneCd = 0; CHASE.hitMsgT = 0;
+  if (!CHASE.mesh) CHASE.mesh = chaseBuildMesh();
+  CHASE.mesh.group.visible = true;
+  lbAttach(); sirenStart(); $('chase').style.display = 'block'; $('chaseTag').style.display = 'block';
+  popup('追跡開始! 犯人に体当たりしろ', 'close');
+}
+function chaseEnd(quiet) {
+  if (!CHASE.on && quiet) { lbDetach(); sirenStop(); return; }
+  CHASE.on = false; CHASE.st = null; if (CHASE.mesh) CHASE.mesh.group.visible = false;
+  lbDetach(); sirenStop(); $('chase').style.display = 'none'; $('chaseTag').style.display = 'none';
+}
+function chaseSuspectStep(dt) {
+  const E = CHASE.st, v = E.v;
+  // カーブ: 先の曲率から、そこで出せる速さ(横G上限)に間に合うよう手前から減速する
+  let vLim = CHASE.vmax; const reach = v * v / (2 * CHASE.brakeDec) + 40;
+  for (let a = 0; a <= reach; a += 15) { const k = Math.abs(centerAt(E.s + a, _cs).k); if (k > 1e-5) { const vA = Math.sqrt(CHASE.ayLim / k); vLim = Math.min(vLim, Math.sqrt(vA * vA + 2 * CHASE.brakeDec * a)); } }
+  // 前の車: 同じ向きの車線ごとに、前の車までの空きを見る。詰まったら空いている隣の車線へ移り、移れなければ手前から合わせて減速
+  const look = Math.max(70, v * 2.2), same = LANES.filter(l => l.dir > 0);
+  const ahead = ld => { let gap = 1e9, vl = 1e9; for (const o of traffic) { if (!o.active || Math.abs(o.d - ld) > 2.3) continue; const a = o.s - E.s; if (a <= -2) continue; const g = a - (o.l + 4.7) / 2; if (g < gap) { gap = g; vl = Math.max(0, o.vs); } } return { gap, vl }; };
+  const sideClear = ld => !traffic.some(o => o.active && Math.abs(o.d - ld) < 2.4 && o.s - E.s > -16 && o.s - E.s < 34);
+  CHASE.laneCd = Math.max(0, CHASE.laneCd - dt);
+  let me = ahead(E.dT);
+  if (me.gap < look * .75 && me.vl < v * .92 && CHASE.laneCd <= 0) {
+    let best = null, bg = me.gap + 12;
+    for (const l of same) { if (Math.abs(l.d - E.dT) < 1) continue; const r = ahead(l.d); if (r.gap > bg && sideClear(l.d)) { best = l; bg = r.gap; } }
+    if (best) { E.dT = best.d; CHASE.laneCd = 3; me = ahead(E.dT); }
+  }
+  let vT = vLim;
+  if (me.gap < look) vT = Math.min(vT, Math.sqrt(me.vl * me.vl + 2 * 6.5 * Math.max(0, me.gap - 7)));
+  const q = centerAt(E.s, _cs), kappa = q.k;
+  gtrDrive(E, dt, kappa, 'chase', vT);
+  const hed = q.h + E.psi, roll = clamp(-E.ay * .008, -.12, .12), pitch = clamp(-E.ax * .004, -.05, .05), m = CHASE.mesh;
+  m.group.position.set(q.x + Math.cos(q.h) * E.d, q.y, q.z - Math.sin(q.h) * E.d); m.group.rotation.set(-Math.atan(q.sl || 0) + pitch, hed, roll);
+  const braking = E.brk > .3; if (m.tailGlows) m.tailGlows.forEach(g => { g.material.opacity = braking ? 1 : .45; g.scale.setScalar(braking ? 2.2 : 1.3); });
+  CHASE.hed = hed;
+}
+function chaseCheckHit() {
+  const E = CHASE.st, c = car, Fx = Math.sin(c.h), Fz = Math.cos(c.h), hed = CHASE.hed, m = CHASE.mesh.group.position;
+  const tfx = Math.sin(hed), tfz = Math.cos(hed), tlx = Math.cos(hed), tlz = -Math.sin(hed), hx = .96, hl = 2.35, R = PLAYER.hit.r;
+  for (const off of [PLAYER.hit.off, -PLAYER.hit.off]) {
+    const px = c.x + Fx * off, pz = c.z + Fz * off, rx = px - m.x, rz = pz - m.z, lx = rx * tlx + rz * tlz, fz = rx * tfx + rz * tfz;
+    const dx = lx - clamp(lx, -hx, hx), dz = fz - clamp(fz, -hl, hl);
+    if (dx * dx + dz * dz >= R * R) continue;
+    const rel = Math.hypot(c.vx - tfx * E.v, c.vz - tfz * E.v);
+    if (rel >= CHASE.minHit) return true;
+    if (CHASE.hitMsgT <= 0) { popup('もっと強く!', 'close'); CHASE.hitMsgT = 1.2; }
+    return false;
+  }
+  return false;
+}
+function chaseStep(dt) {
+  if (!CHASE.on) return;
+  CHASE.t += dt; CHASE.hitMsgT = Math.max(0, CHASE.hitMsgT - dt); lbUpdate(dt);
+  chaseSuspectStep(dt);
+  const gap = CHASE.st.s - car.s;
+  if (chaseCheckHit()) {
+    const t = CHASE.t, ms = Math.round((t % 1) * 100);
+    chaseEnd(false); state = 'over'; overT = 2; sfxPass && sfxPass();
+    showOver('確保!', `<b style="font-size:26px">犯人を確保しました</b><br>タイム <b>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}.${String(ms).padStart(2, '0')}</b>`);
+    return;
+  }
+  if (CHASE.t > CHASE.limit || gap > CHASE.loseDist || gap < -80) {
+    const why = CHASE.t > CHASE.limit ? '時間切れ' : gap < -80 ? '追い越してしまった' : '見失った';
+    chaseEnd(false); state = 'over'; overT = 2; showOver('逃げられた…', `<b style="font-size:22px">${why}</b>`);
+  }
+}
+const _tagV = new THREE.Vector3();
+function chaseHud() {
+  if (!CHASE.on || !CHASE.st) return;
+  const E = CHASE.st, left = Math.max(0, CHASE.limit - CHASE.t), gap = Math.max(0, E.s - car.s);
+  $('chaseT').textContent = Math.floor(left / 60) + ':' + String(Math.floor(left % 60)).padStart(2, '0');
+  $('chaseD').textContent = Math.round(gap) + ' m'; $('chaseV').textContent = Math.round(E.v * 3.6) + ' km/h';
+  const p = CHASE.mesh.group.position; _tagV.set(p.x, p.y + 2.2, p.z).project(camera);
+  let x = _tagV.x, y = _tagV.y; const behind = _tagV.z > 1; if (behind) { x = -x; y = -y; }
+  const on = !behind && Math.abs(x) < .92 && Math.abs(y) < .86, tag = $('chaseTag');
+  if (!on) { const m = Math.max(Math.abs(x), Math.abs(y), 1e-3); x = x / m * .9; y = y / m * .8; }
+  tag.style.left = ((x + 1) / 2 * innerWidth) + 'px'; tag.style.top = ((1 - y) / 2 * innerHeight) + 'px';
+  tag.textContent = on ? '▼ 犯人 ' + Math.round(gap) + 'm' : '◀ 犯人';
+  tag.style.transform = on ? 'translate(-50%,-100%)' : `translate(-50%,-50%) rotate(${Math.atan2(-y, x) * 180 / Math.PI + 180}deg)`;
+  if (!on) tag.textContent = '▶ 犯人';
 }
 
 /* =====================================================================
@@ -2145,6 +2301,7 @@ const _ccTmp = {};                      // stepTrafficで使い回すオブジ�
 function stepTraffic(dt) {
   const c = car, active = state === 'play';
   if (active) gtrStep(dt);
+  if (active) chaseStep(dt);
   // 貫通: ニトロ発動中は車をすり抜ける。ニトロが切れた瞬間に車と重なっていたら、抜けきるまで(最大2秒)貫通を続ける
   const wasOverlap = ghostOverlap; ghostOverlap = false;
   ghostHold = (ghost && !nitroOn && wasOverlap) ? ghostHold + dt : 0;
@@ -2411,6 +2568,7 @@ function ppLead(c, ctx) {                                               // 自�
 }
 const ppNearLane = (ctx, lat) => ctx.lanes.reduce((b, l) => Math.abs(l - lat) < Math.abs(b - lat) ? l : b, ctx.lanes[0]);
 function ppToggle() {
+  if (CHASE.on) { popup('追跡中はProPILOTを使えません'); return; }
   if (state !== 'play' || !ppAvail()) return;
   if (PP.state !== 'off') { ppCancel('ProPILOT 解除'); return; }
   const ctx = ppCtx(car);
@@ -2910,6 +3068,7 @@ function drawG(dt) {                                    // Gの表示値を更�
 }
 let hudTick = 0;
 function updateHud(dt) {
+  chaseHud();
   const kmh = Math.hypot(car.vx, car.vz) * 3.6;
   $('spd').textContent = Math.round(kmh); if (!replay.active) ppHud(dt);
   $('gear').textContent = (Math.sin(car.h) * car.vx + Math.cos(car.h) * car.vz < -.5 ? 'R' : VEH.powertrain.type === 'ice' ? String(car.gear || 1) : VEH.powertrain.coastB ? decelSel : 'D') + '  ' + M.name + (ePedal && VEH.powertrain.type !== 'ice' ? '  e-Pedal' : '');
@@ -3754,7 +3913,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; }, get weather() { return weather; }, set weather(v) { weather = v; updateSky(true); }, wxGrip, gtrTryStart, gtrEnd, get gtrEv() { return gtrEv; }, gtrMesh };
+window.G = { PP, ppToggle, ppCtx, renderer, camera, scene, citySpawnEvent, cityEventCap, RAMPS, DECK, DK, pathProject, cityLevel, todState, setTime(h) { TOD.offset += h - todHours(); updateSky(true); refreshEnv(); }, updateSky, sunLight, hemiLight, headlight, crashFx, get wear() { return wear; }, set wear(v) { wear = v; }, resetWear, city, cityPlaceCar, CITY_WARPS, citySig, gDisp, drawG, frame, setLast(v) { last = v; }, drag, updateDrag, chunks, brokenRails, treeGone, debris, falling, setVehicle, VEHICLES, get vehicleId() { return vehicleId; }, get MAX_STEER() { return MAX_STEER; }, get PHYS() { return { ACC0, VMAX, BRAKE_MAX, MU_LAT, WHEELBASE, MIN_TURN_R }; }, setDriveMode, get driveMode() { return driveMode; }, get raceState() { return raceState; }, get raceClock() { return raceClock; }, updateRace, updateLap, standings, kAt, setCourse, get course() { return course; }, LAP_LEN, centerAt, stepPlayer, stepTraffic, updateRpm, car, traffic, keys, THREE, scene, camera, get state() { return state; }, set camMode(v) { camMode = v; }, startGame, get score() { return score; }, replay, replayTrigger, replayStart, replayEnd, get replayClip() { return replayClip; }, get replayBuf() { return replayBuf; }, get weather() { return weather; }, set weather(v) { weather = v; updateSky(true); }, wxGrip, CHASE, chaseToggle, chaseStep, lbLoad, gtrTryStart, gtrEnd, get gtrEv() { return gtrEv; }, gtrMesh };
 </script>
 </body>
 </html>

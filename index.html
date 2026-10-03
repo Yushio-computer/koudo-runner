@@ -3180,6 +3180,12 @@ function drawMini(dt) {                                              // 毎フ�
     mctx.fillStyle = '#' + t.color.toString(16).padStart(6, '0'); mctx.fillRect(x - 3.5, y - 3.5, 7, 7);
     mctx.strokeStyle = 'rgba(0,0,0,.85)'; mctx.lineWidth = 1; mctx.strokeRect(x - 3.5, y - 3.5, 7, 7);
   }
+  if (CHASE.on && CHASE.city) {                                       // 追跡中: 犯人の位置(赤い丸。ゆっくり脈打つ)。高架にいる間は黄色い輪が付く
+    const X = CHASE.sx * sc + ox, Z = CHASE.sz * sc + oz, pu = .5 + .5 * Math.sin(city.clock * 5);
+    mctx.fillStyle = `rgba(255,50,40,${.18 + .2 * pu})`; mctx.beginPath(); mctx.arc(X, Z, 8 + 3 * pu, 0, Math.PI * 2); mctx.fill();
+    mctx.fillStyle = '#ff3a2a'; mctx.beginPath(); mctx.arc(X, Z, 4.4, 0, Math.PI * 2); mctx.fill(); mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5; mctx.stroke();
+    if (CHASE.sy > 3) { mctx.strokeStyle = '#ffd23a'; mctx.lineWidth = 2; mctx.beginPath(); mctx.arc(X, Z, 7, 0, Math.PI * 2); mctx.stroke(); }
+  }
   const px = car.x * sc + ox, py = car.z * sc + oz, hx = Math.sin(car.h), hz = Math.cos(car.h);
   mctx.beginPath(); mctx.moveTo(px + hx * 7, py + hz * 7); mctx.lineTo(px - hx * 4 - hz * 4.5, py - hz * 4 + hx * 4.5); mctx.lineTo(px - hx * 4 + hz * 4.5, py - hz * 4 - hx * 4.5); mctx.closePath();
   mctx.fillStyle = '#ffd34d'; mctx.fill(); mctx.strokeStyle = '#000'; mctx.lineWidth = 1.2; mctx.stroke();
@@ -3743,6 +3749,12 @@ function cityDrawMini() {
   const tg = city.slots[city.target];
   if (tg) { mctx.strokeStyle = '#5fff9a'; mctx.lineWidth = 2; mctx.strokeRect(tg.x * sc + ox - 4, tg.z * sc + oz - 4, 8, 8); }
   for (const t of traffic) if (t.active && !t.parked) { mctx.fillStyle = '#e8e8e8'; mctx.fillRect(t.x * sc + ox - 1.5, t.z * sc + oz - 1.5, 3, 3); }
+  if (CHASE.on && CHASE.city) {                                       // 追跡中: 犯人の位置(赤い丸。ゆっくり脈打つ)。高架にいる間は黄色い輪が付く
+    const X = CHASE.sx * sc + ox, Z = CHASE.sz * sc + oz, pu = .5 + .5 * Math.sin(city.clock * 5);
+    mctx.fillStyle = `rgba(255,50,40,${.18 + .2 * pu})`; mctx.beginPath(); mctx.arc(X, Z, 8 + 3 * pu, 0, Math.PI * 2); mctx.fill();
+    mctx.fillStyle = '#ff3a2a'; mctx.beginPath(); mctx.arc(X, Z, 4.4, 0, Math.PI * 2); mctx.fill(); mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5; mctx.stroke();
+    if (CHASE.sy > 3) { mctx.strokeStyle = '#ffd23a'; mctx.lineWidth = 2; mctx.beginPath(); mctx.arc(X, Z, 7, 0, Math.PI * 2); mctx.stroke(); }
+  }
   const px = car.x * sc + ox, py = car.z * sc + oz, hx = Math.sin(car.h), hz = Math.cos(car.h);
   mctx.beginPath(); mctx.moveTo(px + hx * 7, py + hz * 7); mctx.lineTo(px - hx * 4 - hz * 4.5, py - hz * 4 + hx * 4.5); mctx.lineTo(px - hx * 4 + hz * 4.5, py - hz * 4 - hx * 4.5); mctx.closePath();
   mctx.fillStyle = '#ffd34d'; mctx.fill(); mctx.strokeStyle = '#000'; mctx.lineWidth = 1.2; mctx.stroke();

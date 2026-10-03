@@ -104,12 +104,15 @@
   #tc.on{display:block}
   #tc .tb{position:absolute;pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:15px;color:#fff;background:rgba(0,0,0,.38);border:2px solid rgba(255,255,255,.55);border-radius:14px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   #tc .tb.act{background:rgba(255,255,255,.45)}
-  #tcSteer{left:calc(14px + env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));width:min(36vw,300px);height:96px;border-radius:48px;overflow:hidden}
-  #tcKnob{position:absolute;top:8px;left:calc(50% - 40px);width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.55);pointer-events:none}
-  #tcAcc{right:calc(14px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));width:104px;height:min(36vh,150px);background:rgba(60,200,120,.35)}
-  #tcBrk{right:calc(130px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));width:84px;height:min(26vh,108px);background:rgba(230,70,70,.35)}
-  #tcBtns{position:absolute;right:calc(14px + env(safe-area-inset-right));bottom:calc(min(36vh,150px) + 26px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,56px);gap:6px;pointer-events:none}
+  #tcZone{position:absolute;pointer-events:auto;touch-action:none;left:0;bottom:0;width:46vw;height:66vh}
+  #tcBase{position:absolute;width:150px;height:150px;box-sizing:border-box;border-radius:50%;background:rgba(0,0,0,.34);border:3px solid rgba(255,255,255,.5);left:calc(26px + env(safe-area-inset-left));bottom:calc(22px + env(safe-area-inset-bottom));pointer-events:none}
+  #tcBase span{position:absolute;font-size:13px;font-weight:800;color:rgba(255,255,255,.55)}
+  #tcKnob{position:absolute;width:68px;height:68px;border-radius:50%;left:calc(50% - 37px);top:calc(50% - 37px);background:rgba(255,255,255,.62);box-shadow:0 2px 8px rgba(0,0,0,.45);pointer-events:none}
+  #tcBtns{position:absolute;right:calc(14px + env(safe-area-inset-right));bottom:calc(128px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(3,60px);gap:6px;pointer-events:none}
   #tcBtns .tb{position:static;height:40px;font-size:12px;border-radius:10px}
+  #tcBtns .big{position:fixed;width:84px;height:84px;border-radius:50%;font-size:14px}
+  #tcNitro{right:calc(14px + env(safe-area-inset-right));bottom:calc(30px + env(safe-area-inset-bottom));background:rgba(60,170,255,.38)!important}
+  #tcDrift{right:calc(108px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));background:rgba(255,170,60,.34)!important}
   #tcEsc{right:calc(14px + env(safe-area-inset-right));top:14px;width:90px;height:40px;font-size:13px}
   #rot{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;font-size:20px;font-weight:700;text-align:center;line-height:1.8}
   @media (orientation:portrait){ body.touch #rot{display:flex} }
@@ -146,7 +149,7 @@
     <p id="modeDesc" style="font-size:13px;opacity:.8;margin-top:2px"></p>
     <div class="courses"><button data-course="public"><kbd>1</kbd>公道(無限ワインディング)</button><button data-course="tsukuba"><kbd>2</kbd>筑波サーキット(周回・ラップ計測)</button><button data-course="straight"><kbd>3</kbd>ベタ踏み直線(カーブなし)</button><button data-course="city"><kbd>4</kbd>都市マップ(信号・駐車・合流)</button><button data-course="smash"><kbd>5</kbd>破壊ステージ(障害物と地雷を壊しまくる)</button></div>
     <p id="courseDesc" style="font-size:13px;opacity:.8"></p>
-    <p class="touchOnly" style="font-size:12px;opacity:.85">遊び方: 左下をなぞってハンドル　右下でアクセル・ブレーキ　右上のボタンで視点・ニトロなど</p>
+    <p class="touchOnly" style="font-size:12px;opacity:.85">遊び方: 左下のスティックを倒す(左右=ハンドル、上=アクセル、下=ブレーキ)　右下のボタンでニトロ・ドリフト・視点など</p>
     <div class="keys">
       <div style="opacity:.85">スタート画面:　<kbd>A</kbd><kbd>D</kbd>コース選択　<kbd>W</kbd><kbd>S</kbd>車種選択　<kbd>Enter</kbd>/<kbd>Space</kbd>スタート</div>
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
@@ -1192,7 +1195,7 @@ if (TOUCH) {
   document.body.classList.add('touch');
   addEventListener('contextmenu', e => e.preventDefault());
   const root = document.createElement('div'); root.id = 'tc';
-  root.innerHTML = '<div class="tb" id="tcSteer"><div id="tcKnob"></div><span style="opacity:.8;font-size:13px;pointer-events:none">ハンドル</span></div><div class="tb" id="tcBrk">ブレーキ</div><div class="tb" id="tcAcc">アクセル</div><div id="tcBtns"></div><div class="tb" id="tcEsc" style="display:none">リプレイ終了</div>';
+  root.innerHTML = '<div id="tcZone"><div id="tcBase"><span style="left:calc(50% - 5px);top:5px">▲</span><span style="left:calc(50% - 5px);bottom:5px">▼</span><span style="left:7px;top:calc(50% - 8px)">◀</span><span style="right:7px;top:calc(50% - 8px)">▶</span><div id="tcKnob"></div></div></div><div id="tcBtns"></div><div class="tb" id="tcEsc" style="display:none">リプレイ終了</div>';
   document.body.appendChild(root);
   const fire = (code, type) => dispatchEvent(new KeyboardEvent(type, { code }));
   const hold = (el, down, up) => {
@@ -1200,30 +1203,36 @@ if (TOUCH) {
     const end = () => { if (el.classList.contains('act')) { el.classList.remove('act'); up(); } };
     el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); el.addEventListener('lostpointercapture', end);
   };
-  hold($('tcAcc'), () => { keys.up = 1; }, () => { keys.up = 0; });
-  hold($('tcBrk'), () => { keys.down = 1; }, () => { keys.down = 0; });
-  const pad = $('tcSteer'), knob = $('tcKnob');
-  const setSteer = e => {
-    const r = pad.getBoundingClientRect(), half = r.width / 2 - 24, nx = clamp((e.clientX - (r.left + r.width / 2)) / half, -1, 1);
-    const m = Math.max(0, Math.abs(nx) - .06) / .94;
-    touchIn.steer = -Math.sign(nx) * Math.pow(m, 1.25);
-    keys.left = nx < -.3 ? 1 : 0; keys.right = nx > .3 ? 1 : 0;                        // ProPILOTの車線変更タップなど、キー入力を見ている処理のため
-    knob.style.left = `calc(50% - 40px + ${nx * half}px)`;
+  // スティック(Switchのコントローラーのように、丸を上下左右へ倒す): 左右=ハンドル(倒した量で切れ角が変わる) / 上=アクセル / 下=ブレーキ・バック。触った場所へスティックが移る
+  const zone = $('tcZone'), base = $('tcBase'), knob = $('tcKnob'), RB = 62;
+  let stickId = null, scx = 0, scy = 0;
+  const applyStick = (dx, dy) => {
+    const len = Math.hypot(dx, dy); if (len > RB) { dx *= RB / len; dy *= RB / len; }
+    knob.style.transform = `translate(${dx}px,${dy}px)`;
+    const nx = dx / RB, ny = dy / RB, m = Math.max(0, Math.abs(nx) - .1) / .9;
+    touchIn.steer = m ? -Math.sign(nx) * Math.pow(m, 1.25) : 0;
+    keys.left = nx < -.3 ? 1 : 0; keys.right = nx > .3 ? 1 : 0;                 // ProPILOTの車線変更タップなど、キー入力を見ている処理のため
+    keys.up = ny < -.3 ? 1 : 0; keys.down = ny > .3 ? 1 : 0;
   };
-  const endSteer = () => { touchIn.steer = null; keys.left = keys.right = 0; knob.style.left = 'calc(50% - 40px)'; };
-  pad.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); try { pad.setPointerCapture(e.pointerId); } catch (_) {} pad.classList.add('act'); setSteer(e); });
-  pad.addEventListener('pointermove', e => { if (pad.classList.contains('act')) setSteer(e); });
-  const endPad = () => { if (pad.classList.contains('act')) { pad.classList.remove('act'); endSteer(); } };
-  pad.addEventListener('pointerup', endPad); pad.addEventListener('pointercancel', endPad); pad.addEventListener('lostpointercapture', endPad);
-  const btns = [['視点', () => 'KeyC'], ['ニトロ', () => 'ShiftLeft', 1], ['ProPILOT', () => 'KeyP'], ['ドリフト', () => 'Space', 1], ['復帰', () => 'KeyR'], ['モード', () => 'KeyQ'], ['回生', () => hasEPedal() ? 'KeyE' : 'KeyB'], ['天候', () => 'KeyF']];
-  for (const [label, code, isHold] of btns) {
-    const b = document.createElement('div'); b.className = 'tb'; b.textContent = label; $('tcBtns').appendChild(b); b.style.pointerEvents = 'auto';
+  const endStick = () => { stickId = null; touchIn.steer = null; keys.left = keys.right = keys.up = keys.down = 0; knob.style.transform = ''; base.style.left = base.style.bottom = ''; };
+  zone.addEventListener('pointerdown', e => {
+    if (stickId !== null) return; e.preventDefault(); e.stopPropagation(); stickId = e.pointerId; try { zone.setPointerCapture(e.pointerId); } catch (_) {}
+    const r = zone.getBoundingClientRect();
+    base.style.left = clamp(e.clientX - r.left - 75, 6, r.width - 156) + 'px'; base.style.bottom = clamp(r.bottom - e.clientY - 75, 6, r.height - 156) + 'px';
+    const br = base.getBoundingClientRect(); scx = br.left + 75; scy = br.top + 75; applyStick(e.clientX - scx, e.clientY - scy);
+  });
+  zone.addEventListener('pointermove', e => { if (e.pointerId === stickId) applyStick(e.clientX - scx, e.clientY - scy); });
+  const upStick = e => { if (e.pointerId === stickId) endStick(); };
+  zone.addEventListener('pointerup', upStick); zone.addEventListener('pointercancel', upStick); zone.addEventListener('lostpointercapture', upStick);
+  const btns = [['ニトロ', () => 'ShiftLeft', 1, 'tcNitro'], ['ドリフト', () => 'Space', 1, 'tcDrift'], ['視点', () => 'KeyC'], ['ProPILOT', () => 'KeyP'], ['復帰', () => 'KeyR'], ['モード', () => 'KeyQ'], ['回生', () => hasEPedal() ? 'KeyE' : 'KeyB'], ['天候', () => 'KeyF']];
+  for (const [label, code, isHold, bigId] of btns) {
+    const b = document.createElement('div'); b.className = 'tb' + (bigId ? ' big' : ''); if (bigId) b.id = bigId; b.textContent = label; $('tcBtns').appendChild(b); b.style.pointerEvents = 'auto';
     let cur = null;
     hold(b, () => { cur = code(); fire(cur, 'keydown'); if (!isHold) { fire(cur, 'keyup'); cur = null; } }, () => { if (cur) fire(cur, 'keyup'); cur = null; });
   }
   hold($('tcEsc'), () => fire('Escape', 'keydown'), () => fire('Escape', 'keyup'));
   $('touchGo').addEventListener('click', e => { e.stopPropagation(); if (state === 'ready') startGame(); });
-  setInterval(() => { root.classList.toggle('on', state === 'play' || replay.active); $('tcEsc').style.display = replay.active ? 'flex' : 'none'; $('tcBtns').style.display = replay.active ? 'none' : ''; $('tcSteer').style.display = $('tcAcc').style.display = $('tcBrk').style.display = replay.active ? 'none' : ''; }, 120);
+  setInterval(() => { root.classList.toggle('on', state === 'play' || replay.active); $('tcEsc').style.display = replay.active ? 'flex' : 'none'; $('tcBtns').style.display = zone.style.display = replay.active ? 'none' : ''; }, 120);
 }
 
 

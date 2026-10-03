@@ -2066,7 +2066,8 @@ function gtrStep(dt) {
    ・犯人はGT-R。車体の力学(gtrPhys/gtrDrive)で運転する: カーブの手前で先読みして減速 / 前の車を見て空いた車線へ移る / 滑らず安定して速い
    ・光の安全: パトライトは左右が交互に、1つの灯が毎秒1.25回(なめらかな明暗)。画面全体の明滅はしない
    ===================================================================== */
-const CHASE = { on: false, st: null, mesh: null, t: 0, limit: 135, vmax: 53, ayLim: 9.2, brakeDec: 6.5, accK: 1.35, minHit: 2.8, loseDist: 550, laneCd: 0, hitMsgT: 0, endT: 0 };
+// pace: 犯人の速さの倍率(自車との距離m→倍率)。近づかれると本気で逃げ、離れすぎると少し緩める → ニトロを使わないと詰められず、使えば追いつけるくらいに
+const CHASE = { on: false, st: null, mesh: null, t: 0, limit: 135, vmax: 53, pace: [[30, 1.12], [90, 1.05], [160, 1.0], [300, .94], [450, .9]], ayLim: 9.2, brakeDec: 6.5, accK: 1.35, minHit: 2.8, loseDist: 550, laneCd: 0, hitMsgT: 0, endT: 0 };
 let LB = null, lbLoading = false, lbT = 0, sirenNodes = null, chaseModel = null, chaseModelLoading = false, chaseWait = [];
 const _cs = { x: 0, y: 0, z: 0, h: 0, sl: 0, k: 0 };
 function lbLoad() {
@@ -2127,6 +2128,7 @@ function chaseToggle() {
   const same = LANES.filter(l => l.dir > 0), free = same.filter(l => !traffic.some(o => o.active && Math.abs(o.d - l.d) < 2.4 && Math.abs(o.s - (car.s + 170)) < 45));
   const ln = (free.length ? free : same)[Math.floor(Math.random() * (free.length ? free.length : same.length))];
   const st = gtrNewState(ln.d, Math.max(34, Math.hypot(car.vx, car.vz) + 4)); st.s = car.s + rnd(150, 190); st.accK = CHASE.accK;
+  car.nitro = 1;                                                                           // ニトロは満タンで始まる(これを使って追いつく)
   CHASE.on = true; CHASE.st = st; CHASE.t = 0; CHASE.laneCd = 0; CHASE.hitMsgT = 0;
   if (!CHASE.mesh) CHASE.mesh = chaseBuildMesh();
   CHASE.mesh.group.visible = true;
@@ -2141,7 +2143,7 @@ function chaseEnd(quiet) {
 function chaseSuspectStep(dt) {
   const E = CHASE.st, v = E.v;
   // カーブ: 先の曲率から、そこで出せる速さ(横G上限)に間に合うよう手前から減速する
-  let vLim = CHASE.vmax; const reach = v * v / (2 * CHASE.brakeDec) + 40;
+  let vLim = CHASE.vmax * lerpTable(CHASE.pace, Math.max(0, E.s - car.s)); const reach = v * v / (2 * CHASE.brakeDec) + 40;
   for (let a = 0; a <= reach; a += 15) { const k = Math.abs(centerAt(E.s + a, _cs).k); if (k > 1e-5) { const vA = Math.sqrt(CHASE.ayLim / k); vLim = Math.min(vLim, Math.sqrt(vA * vA + 2 * CHASE.brakeDec * a)); } }
   // 前の車: 各車線で「いま出せる速さ」を比べ、いちばん速く走れる車線へ素早く移る。左右とも詰まっていて空きがなければ、対向車線に出て追い越し、追い越したら元の車線へ戻る
   const look = Math.max(80, v * 2.4), same = LANES.filter(l => l.dir > 0), opp = LANES.find(l => l.dir < 0 && l.d > -3);

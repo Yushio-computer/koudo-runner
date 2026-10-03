@@ -163,7 +163,7 @@
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
       <div><kbd>A</kbd><kbd>D</kbd><kbd>←</kbd><kbd>→</kbd>ハンドル　<kbd>Space</kbd>サイドブレーキ(ドリフト)</div>
       <div><kbd>Shift</kbd>ニトロ(すり抜けで回復)　<kbd>C</kbd>視点切替　<kbd>V</kbd>車種　<kbd>Q</kbd>ドライブモード　<kbd>E</kbd>回生の強さ(e-Pedal・セレナ)　<kbd>B</kbd>D/Bレンジ(ステップワゴン)　<kbd>P</kbd>ProPILOT(セレナ・公道/高架)　<kbd>R</kbd>いちばん近い道路へ復帰　<kbd>M</kbd>音 ON/OFF　<kbd>N</kbd>現実の時間と連動 ON/OFF(OFFで常に昼)　<kbd>F</kbd>天候切替(晴れ/雨/霧)</div>
-      <div style="opacity:.85"><kbd>K</kbd>追跡モード(公道): パトライトを載せて犯人の車を追い、体当たりで確保!</div>
+      <div style="opacity:.85"><kbd>K</kbd>追跡モード(公道・都市の街中): パトライトを載せて犯人の車を追い、体当たりで確保!</div>
       <div style="opacity:.85">衝突・急ブレーキをすると右下に📷が出ます。押すとその場面をリプレイ(<kbd>Esc</kbd>で戻る)</div>
       <div style="opacity:.85">ProPILOT作動中、前の車に詰まって「追い越しますか?」と出たら<kbd>A</kbd>を軽くタップで追越車線へ(車線変更支援)。戻るときは<kbd>D</kbd>。長押しすると今まで通り手動運転</div>
       <div style="opacity:.85">ProPILOT作動中に事故(巻き込みなど)が起きると、警告音とハザードを出しながら自動で緊急停車します</div>
@@ -2119,69 +2119,157 @@ function chaseBuildMesh() {
   });
   return m;
 }
+const CHASE_PRESET = {
+  public: { limit: 135, vmax: 53, pace: [[30, 1.12], [90, 1.05], [160, 1.0], [300, .94], [450, .9]], loseDist: 550, startGap: [150, 190] },
+  city: { limit: 120, vmax: 36, pace: [[25, 1.12], [70, 1.05], [130, 1.0], [220, .94], [320, .9]], loseDist: 330, startGap: [110, 160] },
+};
+Object.assign(CHASE, { city: false, P: null, turns: [], nodes: [], near: [], gapNow: 0, sx: 0, sy: 0, sz: 0, hed: 0 });
+const _qA = { x: 0, z: 0, h: 0 }, _qB = { x: 0, z: 0, h: 0 }, _qC = { x: 0, z: 0, h: 0 }, chasePool = [];
+/* ---- 都市の追跡: 犯人は交差点ごとに直進・左折・右折をえらんで走る。経路は中心線の点列(mkPath)で作り、道路の幅の中で車線(d)をえらぶ ---- */
+function chaseCityRoute(i0, j0, di0, dj0) {
+  const NX = CITY_XS.length, NZ = CITY_ZS.length, ok = (i, j) => i >= 0 && i < NX && j >= 0 && j < NZ, RF = 15;
+  const nodes = [[i0, j0]]; let i = i0 + di0, j = j0 + dj0, di = di0, dj = dj0; nodes.push([i, j]);
+  for (let k = 0; k < 60; k++) {
+    const cand = [[di, dj, .55], [dj, -di, .225], [-dj, di, .225]].filter(c => ok(i + c[0], j + c[1])), tot = cand.reduce((a, c) => a + c[2], 0);
+    let r = Math.random() * tot, pick = cand[0]; for (const c of cand) { r -= c[2]; if (r <= 0) { pick = c; break; } }
+    di = pick[0]; dj = pick[1]; i += di; j += dj; nodes.push([i, j]);
+  }
+  const X = k => CITY_XS[nodes[k][0]], Z = k => CITY_ZS[nodes[k][1]], dirOf = (a, b) => { const dx = X(b) - X(a), dz = Z(b) - Z(a), l = Math.hypot(dx, dz); return [dx / l, dz / l]; };
+  const pts = [[X(0) - dirOf(0, 1)[0] * 20, Z(0) - dirOf(0, 1)[1] * 20]], nodeIdx = [], turns = [];
+  const lineTo = (x, z) => { const p = pts[pts.length - 1], len = Math.hypot(x - p[0], z - p[1]), n = Math.max(1, Math.ceil(len / 3)); for (let q = 1; q <= n; q++) pts.push([p[0] + (x - p[0]) * q / n, p[1] + (z - p[1]) * q / n]); };
+  for (let k = 0; k < nodes.length; k++) {
+    const cx = X(k), cz = Z(k), last = k === nodes.length - 1;
+    const inn = k > 0 ? dirOf(k - 1, k) : dirOf(0, 1), out = last ? inn : dirOf(k, k + 1), turn = !last && k > 0 && (Math.abs(inn[0] - out[0]) > .01 || Math.abs(inn[1] - out[1]) > .01);
+    if (!turn) { lineTo(cx, cz); nodeIdx.push(pts.length - 1); continue; }
+    lineTo(cx - inn[0] * RF, cz - inn[1] * RF); const iA = pts.length - 1, A = pts[iA];
+    const cross = inn[0] * out[1] - inn[1] * out[0];                                      // 符号つきの回り方(+:左折 / -:右折。x東・z南の座標で向きの角が増えるほう=左)
+    for (let q = 1; q <= 12; q++) { const ph = Math.PI / 2 * q / 12; pts.push([A[0] + (Math.sin(ph) * inn[0] + (1 - Math.cos(ph)) * out[0]) * RF, A[1] + (Math.sin(ph) * inn[1] + (1 - Math.cos(ph)) * out[1]) * RF]); }
+    turns.push({ iA, iB: pts.length - 1, left: cross < 0 }); nodeIdx.push(iA + 6);
+  }
+  const P = mkPath(pts, false);
+  return { P, turns: turns.map(t => ({ s0: P.S[t.iA], s1: P.S[t.iB], left: t.left })), nodes: nodeIdx.map((ix, k) => ({ s: P.S[ix], x: X(k), z: Z(k) })) };
+}
+function chaseCityStart() {
+  if (cityLevel(car).zone !== 'ground') { popup('地上の道路で追跡できます(高架・ランプは未対応)'); return null; }
+  const px = car.x, pz = car.z, fx = Math.sin(car.h), fz = Math.cos(car.h), NX = CITY_XS.length, NZ = CITY_ZS.length, cands = [];
+  for (let i = 0; i < NX; i++) for (let j = 0; j < NZ; j++) { const dx = CITY_XS[i] - px, dz = CITY_ZS[j] - pz, d = Math.hypot(dx, dz); if (d < 85 || d > 210) continue; cands.push({ i, j, dx, dz, d, front: (dx * fx + dz * fz) / d }); }
+  if (!cands.length) { popup('この場所では追跡を始められません(街の中心寄りで押してください)'); return null; }
+  cands.sort((a, b) => b.front - a.front); const top = cands.slice(0, Math.min(3, cands.length)), c = top[Math.floor(Math.random() * top.length)];
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([di, dj]) => c.i + di >= 0 && c.i + di < NX && c.j + dj >= 0 && c.j + dj < NZ).sort((a, b) => (b[0] * c.dx + b[1] * c.dz) - (a[0] * c.dx + a[1] * c.dz));
+  const dir = dirs[0], route = chaseCityRoute(c.i, c.j, dir[0], dir[1]);
+  return route;
+}
 function chaseToggle() {
   if (CHASE.on) { chaseEnd(true); popup('追跡を終了'); return; }
   if (state !== 'play') return;
-  if (course !== 'public') { popup('追跡モードは公道で使えます(都市は準備中)'); return; }
+  if (course !== 'public' && course !== 'city') { popup('追跡モードは公道と都市マップで使えます'); return; }
+  const city = course === 'city';
+  let st, route = null;
+  if (city) { route = chaseCityStart(); if (!route) return; }
   if (PP.state !== 'off') ppCancel('追跡開始', true);
   gtrEnd();
-  const same = LANES.filter(l => l.dir > 0), free = same.filter(l => !traffic.some(o => o.active && Math.abs(o.d - l.d) < 2.4 && Math.abs(o.s - (car.s + 170)) < 45));
-  const ln = (free.length ? free : same)[Math.floor(Math.random() * (free.length ? free.length : same.length))];
-  const st = gtrNewState(ln.d, Math.max(34, Math.hypot(car.vx, car.vz) + 4)); st.s = car.s + rnd(150, 190); st.accK = CHASE.accK;
+  Object.assign(CHASE, CHASE_PRESET[city ? 'city' : 'public']); CHASE.city = city;
+  if (city) {
+    CHASE.P = route.P; CHASE.turns = route.turns; CHASE.nodes = route.nodes;
+    st = gtrNewState(CITY_LANE, Math.max(14, Math.hypot(car.vx, car.vz) + 3)); st.s = 20; st.dT = CITY_LANE;
+  } else {
+    CHASE.P = null; CHASE.turns = []; CHASE.nodes = [];
+    const same = LANES.filter(l => l.dir > 0), free = same.filter(l => !traffic.some(o => o.active && Math.abs(o.d - l.d) < 2.4 && Math.abs(o.s - (car.s + 170)) < 45));
+    const ln = (free.length ? free : same)[Math.floor(Math.random() * (free.length ? free.length : same.length))];
+    st = gtrNewState(ln.d, Math.max(34, Math.hypot(car.vx, car.vz) + 4)); st.s = car.s + rnd(CHASE.startGap[0], CHASE.startGap[1]);
+  }
+  st.accK = CHASE.accK;
   car.nitro = 1;                                                                           // ニトロは満タンで始まる(これを使って追いつく)
-  CHASE.on = true; CHASE.st = st; CHASE.t = 0; CHASE.laneCd = 0; CHASE.hitMsgT = 0;
+  CHASE.on = true; CHASE.st = st; CHASE.t = 0; CHASE.laneCd = 0; CHASE.hitMsgT = 0; CHASE.gapNow = 150;
   if (!CHASE.mesh) CHASE.mesh = chaseBuildMesh();
   CHASE.mesh.group.visible = true;
   lbAttach(); sirenStart(); $('chase').style.display = 'block'; $('chaseTag').style.display = 'block';
+  chaseSuspectStep(0.001);                                                                 // 最初の位置を決める
   popup('追跡開始! 犯人に体当たりしろ', 'close');
 }
 function chaseEnd(quiet) {
   if (!CHASE.on && quiet) { lbDetach(); sirenStop(); return; }
-  CHASE.on = false; CHASE.st = null; if (CHASE.mesh) CHASE.mesh.group.visible = false;
+  CHASE.on = false; CHASE.st = null; CHASE.P = null; if (CHASE.mesh) CHASE.mesh.group.visible = false;
   lbDetach(); sirenStop(); $('chase').style.display = 'none'; $('chaseTag').style.display = 'none';
 }
+function cityK(P, s) { return angDiff(pathAt(P, s + 1.5, 0, _qA).h, pathAt(P, Math.max(0, s - 1.5), 0, _qB).h) / 3; }
+function idxAt(P, u) { let lo = 0, hi = P.n - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (P.S[m] <= u) lo = m; else hi = m; } return lo; }
+function chaseNear(E) {                                  // 犯人の近くの車を、犯人の道のりでの位置 rel・横位置 d・道に沿った速さ vs・長さ l に直して並べる
+  const out = CHASE.near; out.length = 0; let k = 0;
+  const push = (rel, d, vs, l) => { const o = chasePool[k] || (chasePool[k] = {}); k++; o.rel = rel; o.d = d; o.vs = vs; o.l = l; out.push(o); };
+  if (!CHASE.city) { for (const o of traffic) if (o.active) push(o.s - E.s, o.d, o.vs, o.l); return out; }
+  const P = CHASE.P, i0 = idxAt(P, E.s - 40), i1 = Math.min(P.n - 1, idxAt(P, E.s + 280) + 1);
+  for (const t of traffic) {
+    if (!t.active || t.parked) continue;
+    if (Math.abs(t.x - CHASE.sx) > 300 || Math.abs(t.z - CHASE.sz) > 300) continue;
+    let bi = -1, bd = 1e18; for (let i = i0; i <= i1; i++) { const ex = t.x - P.pts[i][0], ez = t.z - P.pts[i][1], d2 = ex * ex + ez * ez; if (d2 < bd) { bd = d2; bi = i; } }
+    if (bd > 144) continue;
+    const tg = P.T[bi], ax = t.x - P.pts[bi][0], az = t.z - P.pts[bi][1];
+    push(P.S[bi] + ax * tg[0] + az * tg[1] - E.s, ax * tg[1] - az * tg[0], t.vs * Math.cos(t.heading - Math.atan2(tg[0], tg[1])), t.l || 4.4);
+  }
+  return out;
+}
+function chaseCrossCap(E, v) {                           // 交差点に横から来る車と、同時に交差点へ入ってしまいそうなら手前から速さを落とす(信号は無視して走る)
+  let node = null; for (const n of CHASE.nodes) if (n.s > E.s - 2) { node = n; break; }
+  if (!node) return 1e9;
+  const dN = node.s - E.s; if (dN > 22 + v * 2.2) return 1e9;
+  const tN = dN / Math.max(v, 6), ht = pathAt(CHASE.P, node.s, 0, _qC).h;
+  for (const t of traffic) {
+    if (!t.active || t.parked) continue;
+    if (Math.abs(t.x - node.x) > 60 || Math.abs(t.z - node.z) > 60 || Math.abs(Math.cos(t.heading - ht)) > .7) continue;
+    for (let tau = tN - .5; tau <= tN + 1.2; tau += .5) { const px = t.x + Math.sin(t.heading) * t.vs * tau, pz = t.z + Math.cos(t.heading) * t.vs * tau; if (Math.hypot(px - node.x, pz - node.z) < 8) return Math.max(6, dN / (tN + 1.8)); }
+  }
+  return 1e9;
+}
 function chaseSuspectStep(dt) {
-  const E = CHASE.st, v = E.v;
-  // カーブ: 先の曲率から、そこで出せる速さ(横G上限)に間に合うよう手前から減速する
-  let vLim = CHASE.vmax * lerpTable(CHASE.pace, Math.max(0, E.s - car.s)); const reach = v * v / (2 * CHASE.brakeDec) + 40;
-  for (let a = 0; a <= reach; a += 15) { const k = Math.abs(centerAt(E.s + a, _cs).k); if (k > 1e-5) { const vA = Math.sqrt(CHASE.ayLim / k); vLim = Math.min(vLim, Math.sqrt(vA * vA + 2 * CHASE.brakeDec * a)); } }
+  const E = CHASE.st, v = E.v, city = CHASE.city, P = CHASE.P, cl = city ? CITY_LANE : 0;
+  // カーブ: 先の曲率(走る車線の位置も考えた実際の半径)から、そこで出せる速さ(横G上限)に間に合うよう手前から減速する
+  let vLim = CHASE.vmax * lerpTable(CHASE.pace, CHASE.gapNow); const reach = v * v / (2 * CHASE.brakeDec) + 40;
+  for (let a = 0; a <= reach; a += city ? 6 : 15) { const k = city ? cityK(P, E.s + a) : centerAt(E.s + a, _cs).k; if (Math.abs(k) > 1e-5) { const ke = Math.abs(k) / Math.max(.35, 1 - k * E.dT), vA = Math.sqrt(CHASE.ayLim / ke); vLim = Math.min(vLim, Math.sqrt(vA * vA + 2 * CHASE.brakeDec * a)); } }
   // 前の車: 各車線で「いま出せる速さ」を比べ、いちばん速く走れる車線へ素早く移る。左右とも詰まっていて空きがなければ、対向車線に出て追い越し、追い越したら元の車線へ戻る
-  const look = Math.max(80, v * 2.4), same = LANES.filter(l => l.dir > 0), opp = LANES.find(l => l.dir < 0 && l.d > -3);
-  const ahead = ld => { let gap = 1e9, vl = 1e9; for (const o of traffic) { if (!o.active || Math.abs(o.d - ld) > 2.3) continue; const a = o.s - E.s; if (a <= -2) continue; const g = a - (o.l + 4.7) / 2; if (g < gap) { gap = g; vl = Math.max(0, o.vs); } } return { gap, vl }; };
+  const near = chaseNear(E), look = Math.max(city ? 60 : 80, v * (city ? 2 : 2.4)), same = city ? [{ d: cl, dir: 1 }] : LANES.filter(l => l.dir > 0), opp = city ? { d: -cl, dir: -1 } : LANES.find(l => l.dir < 0 && l.d > -3);
+  const ahead = ld => { let gap = 1e9, vl = 1e9; for (const o of near) { if (Math.abs(o.d - ld) > 2.3 || o.rel <= -2) continue; const g = o.rel - (o.l + 4.7) / 2; if (g < gap) { gap = g; vl = Math.max(0, o.vs); } } return { gap, vl }; };
   const sideClear = ld => {                                                              // その車線へ移れるか: 真横にいない / 追いついてしまう遅い車がいない / 後ろから来る速い車にぶつけられない
-    for (const o of traffic) { if (!o.active || Math.abs(o.d - ld) > 2.4) continue; const rel = o.s - E.s;
+    for (const o of near) { if (Math.abs(o.d - ld) > 2.4) continue; const rel = o.rel;
       if (rel > -9 && rel < 11) return false;
       if (rel >= 11 && rel < 11 + Math.max(0, v - o.vs) * 1.4) return false;
       if (rel <= -9 && rel > -(9 + Math.max(0, o.vs - v) * 1.6)) return false; }
     return true;
   };
-  const crossOK = ld => same.concat(opp ? [opp] : []).every(l => !(l.d > Math.min(E.d, ld) + .5 && l.d < Math.max(E.d, ld) - .5) || sideClear(l.d));   // 途中で横切る車線にも、ぶつかる車がいないこと
+  const lanesAll = same.concat(opp ? [opp] : []);
+  const crossOK = ld => lanesAll.every(l => !(l.d > Math.min(E.d, ld) + .5 && l.d < Math.max(E.d, ld) - .5) || sideClear(l.d));   // 途中で横切る車線にも、ぶつかる車がいないこと
   const speedPot = r => r.gap >= look ? vLim : Math.min(vLim, Math.sqrt(r.vl * r.vl + 2 * 6.5 * Math.max(0, r.gap - 7)));
+  let td = 1e9; if (city) for (const T of CHASE.turns) if (T.s1 > E.s) { td = Math.max(0, T.s0 - E.s); break; }      // 次の曲がり角までの距離
+  const oppNeed = city ? 140 : 290;
   CHASE.laneCd = Math.max(0, CHASE.laneCd - dt);
   let me = ahead(E.dT);
   if (CHASE.laneCd <= 0) {
     const onOpp = E.dT < 0, cur = speedPot(me) - (onOpp ? 8 : 0);
     let best = null, bs = cur + (onOpp ? 0 : 4);
-    for (const l of same.concat(opp ? [opp] : [])) {
+    for (const l of lanesAll) {
       if (Math.abs(l.d - E.dT) < 1 || !sideClear(l.d) || !crossOK(l.d)) continue;
       const r = ahead(l.d); let sc = speedPot(r);
-      if (l.dir < 0) { if (r.gap < 290) continue; sc -= 8; }
+      if (l.dir < 0) { if (r.gap < oppNeed || td < 70 + v * 1.3) continue; sc -= 8; }
       if (sc > bs) { best = l; bs = sc; }
     }
-    if (!best && onOpp && me.gap < 150) {                                                // 対向車が迫っている: 多少きつくても、空きの大きい元の車線へ割り込む
-      let bg = 0; for (const l of same) { if (!crossOK(l.d)) continue; const r = ahead(l.d); const near = traffic.some(o => o.active && Math.abs(o.d - l.d) < 2.4 && Math.abs(o.s - E.s) < 8); if (!near && r.gap > bg) { best = l; bg = r.gap; } }
+    if (!best && onOpp && (me.gap < 150 || td < 40 + v * .9)) {                         // 対向車が迫っている / 曲がり角が近い: 多少きつくても元の車線へ割り込む
+      let bg = 0; for (const l of same) { if (!crossOK(l.d)) continue; const r = ahead(l.d); const nearby = near.some(o => Math.abs(o.d - l.d) < 2.4 && Math.abs(o.rel) < 8); if (!nearby && r.gap > bg) { best = l; bg = r.gap; } }
     }
     if (best) { E.dT = best.d; CHASE.laneCd = best.dir < 0 ? 2.4 : 1.5; me = ahead(E.dT); }
   }
   let vT = vLim;
   for (const r of [me, ahead(E.d)]) if (r.gap < look) vT = Math.min(vT, Math.sqrt(r.vl * r.vl + 2 * 6.5 * Math.max(0, r.gap - 7)));   // 車線を移っている最中は、いまいる車線と移る先の両方の前の車に合わせる
-  const q = centerAt(E.s, _cs), kappa = q.k;
+  if (city) vT = Math.min(vT, chaseCrossCap(E, v));
+  let q, kappa, px, pz, py = 0, slope = 0;
+  if (city) { q = pathAt(P, E.s, E.d, _qA); kappa = cityK(P, E.s); px = q.x; pz = q.z; }
+  else { q = centerAt(E.s, _cs); kappa = q.k; px = q.x + Math.cos(q.h) * E.d; pz = q.z - Math.sin(q.h) * E.d; py = q.y; slope = q.sl || 0; }
+  const qh = q.h;
   gtrDrive(E, dt, kappa, 'chase', vT);
   if (Math.abs(E.psi) > .8) { E.psi *= .6; E.r = 0; E.vy *= .3; }                       // 万一スピンしかけても、そのまま回り続けない(立て直す)
-  const hed = q.h + E.psi, roll = clamp(-E.ay * .008, -.12, .12), pitch = clamp(-E.ax * .004, -.05, .05), m = CHASE.mesh;
-  m.group.position.set(q.x + Math.cos(q.h) * E.d, q.y, q.z - Math.sin(q.h) * E.d); m.group.rotation.set(-Math.atan(q.sl || 0) + pitch, hed, roll);
+  const hed = qh + E.psi, roll = clamp(-E.ay * .008, -.12, .12), pitch = clamp(-E.ax * .004, -.05, .05), m = CHASE.mesh;
+  m.group.position.set(px, py, pz); m.group.rotation.set(-Math.atan(slope) + pitch, hed, roll);
   const braking = E.brk > .3; if (m.tailGlows) m.tailGlows.forEach(g => { g.material.opacity = braking ? 1 : .45; g.scale.setScalar(braking ? 2.2 : 1.3); });
-  CHASE.hed = hed;
+  CHASE.hed = hed; CHASE.sx = px; CHASE.sy = py; CHASE.sz = pz;
 }
 function chaseCheckHit() {
   const E = CHASE.st, c = car, Fx = Math.sin(c.h), Fz = Math.cos(c.h), hed = CHASE.hed, m = CHASE.mesh.group.position;
@@ -2200,23 +2288,24 @@ function chaseCheckHit() {
 function chaseStep(dt) {
   if (!CHASE.on) return;
   CHASE.t += dt; CHASE.hitMsgT = Math.max(0, CHASE.hitMsgT - dt); lbUpdate(dt);
-  const sub = Math.max(1, Math.ceil(dt * 45)); for (let i = 0; i < sub; i++) chaseSuspectStep(dt / sub);   // フレームが遅い端末でも、犯人の運転が荒れないよう細かく刻む
-  const gap = CHASE.st.s - car.s;
+  const sub = Math.max(1, Math.ceil(dt * 45)); for (let i = 0; i < sub; i++) { CHASE.gapNow = CHASE.city ? Math.hypot(CHASE.sx - car.x, CHASE.sz - car.z) : CHASE.st.s - car.s; chaseSuspectStep(dt / sub); }   // フレームが遅い端末でも、犯人の運転が荒れないよう細かく刻む
+  const gap = CHASE.gapNow;
   if (chaseCheckHit()) {
     const t = CHASE.t, ms = Math.round((t % 1) * 100);
     chaseEnd(false); state = 'over'; overT = 2; sfxPass && sfxPass();
     showOver('確保!', `<b style="font-size:26px">犯人を確保しました</b><br>タイム <b>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}.${String(ms).padStart(2, '0')}</b>`);
     return;
   }
-  if (CHASE.t > CHASE.limit || gap > CHASE.loseDist || gap < -80) {
-    const why = CHASE.t > CHASE.limit ? '時間切れ' : gap < -80 ? '追い越してしまった' : '見失った';
+  const passed = !CHASE.city && gap < -80;
+  if (CHASE.t > CHASE.limit || gap > CHASE.loseDist || passed) {
+    const why = CHASE.t > CHASE.limit ? '時間切れ' : passed ? '追い越してしまった' : '見失った';
     chaseEnd(false); state = 'over'; overT = 2; showOver('逃げられた…', `<b style="font-size:22px">${why}</b>`);
   }
 }
 const _tagV = new THREE.Vector3();
 function chaseHud() {
   if (!CHASE.on || !CHASE.st) return;
-  const E = CHASE.st, left = Math.max(0, CHASE.limit - CHASE.t), gap = Math.max(0, E.s - car.s);
+  const E = CHASE.st, left = Math.max(0, CHASE.limit - CHASE.t), gap = Math.max(0, CHASE.gapNow);
   $('chaseT').textContent = Math.floor(left / 60) + ':' + String(Math.floor(left % 60)).padStart(2, '0');
   $('chaseD').textContent = Math.round(gap) + ' m'; $('chaseV').textContent = Math.round(E.v * 3.6) + ' km/h';
   const p = CHASE.mesh.group.position; _tagV.set(p.x, p.y + 2.2, p.z).project(camera);

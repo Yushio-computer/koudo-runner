@@ -1965,7 +1965,7 @@ function gtrPhys(e, dt, steer, thr, brk) {
     const v = Math.max(e.v, 5);
     const tr = clamp(e.ax, -9, 6) * GTR_M * GTR_H / GTR_L;                                // 加減速で前後の荷重が動く
     const Fzf = Math.max(GTR_M * 9.8 * GTR_LB / GTR_L - tr, 2500), Fzr = Math.max(GTR_M * 9.8 * GTR_LA / GTR_L + tr, 2500);
-    const Fd = thr * GTR_M * 7.5 * Math.max(0, 1 - e.v / 70), Fb = brk * GTR_M * 10.5, rb = .35;
+    const Fd = thr * GTR_M * 7.5 * (e.accK || 1) * Math.max(0, 1 - e.v / 70), Fb = brk * GTR_M * 10.5, rb = .35;
     const Fxf = Fd * .4 - Fb * (1 - rb), Fxr = Fd * .6 - Fb * rb;                          // 駆動・制動に使ったぶん、横の力に回せる余力が減る
     const Df = Math.max(Math.sqrt(Math.max(0, (GTR_MU * Fzf) ** 2 - Fxf * Fxf)), .3 * GTR_MU * Fzf);
     const Dr = Math.max(Math.sqrt(Math.max(0, (GTR_MU * Fzr) ** 2 - Fxr * Fxr)), .3 * GTR_MU * Fzr);
@@ -1993,6 +1993,7 @@ function gtrDrive(e, dt, kappa, mode, cruiseV) {                                
   if (mode === 'brake') brk = .95;
   else {
     const err = cruiseV - e.v; thr = clamp(err * .5, 0, 1); brk = chs ? clamp(-err * .7, 0, .85) : clamp(-err * .25, 0, .4);
+    if (chs) { brk = Math.min(brk, Math.sqrt(Math.max(0, (.93 * GTR_MU * 9.8) ** 2 - e.ay * e.ay)) / 10.5); if (k > .45) { thr = 0; brk = 0; } }   // 曲がりながら強く踏むとグリップを使い切るので、横Gに応じてブレーキを絞る / 後ろが流れたらペダルを離す
     if (agg) thr = Math.max(thr, .45) * (1 - .8 * k);                                       // 蛇行中はパワーをかけ続ける(流れたら緩める)
   }
   gtrPhys(e, dt, steer, thr, brk);
@@ -2065,7 +2066,7 @@ function gtrStep(dt) {
    ・犯人はGT-R。車体の力学(gtrPhys/gtrDrive)で運転する: カーブの手前で先読みして減速 / 前の車を見て空いた車線へ移る / 滑らず安定して速い
    ・光の安全: パトライトは左右が交互に、1つの灯が毎秒1.25回(なめらかな明暗)。画面全体の明滅はしない
    ===================================================================== */
-const CHASE = { on: false, st: null, mesh: null, t: 0, limit: 150, vmax: 49, ayLim: 9.2, brakeDec: 8, minHit: 2.8, loseDist: 550, laneCd: 0, hitMsgT: 0, endT: 0 };
+const CHASE = { on: false, st: null, mesh: null, t: 0, limit: 135, vmax: 53, ayLim: 9.2, brakeDec: 6.5, accK: 1.35, minHit: 2.8, loseDist: 550, laneCd: 0, hitMsgT: 0, endT: 0 };
 let LB = null, lbLoading = false, lbT = 0, sirenNodes = null, chaseModel = null, chaseModelLoading = false, chaseWait = [];
 const _cs = { x: 0, y: 0, z: 0, h: 0, sl: 0, k: 0 };
 function lbLoad() {
@@ -2125,7 +2126,7 @@ function chaseToggle() {
   gtrEnd();
   const same = LANES.filter(l => l.dir > 0), free = same.filter(l => !traffic.some(o => o.active && Math.abs(o.d - l.d) < 2.4 && Math.abs(o.s - (car.s + 170)) < 45));
   const ln = (free.length ? free : same)[Math.floor(Math.random() * (free.length ? free.length : same.length))];
-  const st = gtrNewState(ln.d, Math.max(34, Math.hypot(car.vx, car.vz) + 4)); st.s = car.s + rnd(150, 190);
+  const st = gtrNewState(ln.d, Math.max(34, Math.hypot(car.vx, car.vz) + 4)); st.s = car.s + rnd(150, 190); st.accK = CHASE.accK;
   CHASE.on = true; CHASE.st = st; CHASE.t = 0; CHASE.laneCd = 0; CHASE.hitMsgT = 0;
   if (!CHASE.mesh) CHASE.mesh = chaseBuildMesh();
   CHASE.mesh.group.visible = true;
@@ -2147,16 +2148,25 @@ function chaseSuspectStep(dt) {
   const ahead = ld => { let gap = 1e9, vl = 1e9; for (const o of traffic) { if (!o.active || Math.abs(o.d - ld) > 2.3) continue; const a = o.s - E.s; if (a <= -2) continue; const g = a - (o.l + 4.7) / 2; if (g < gap) { gap = g; vl = Math.max(0, o.vs); } } return { gap, vl }; };
   const sideClear = ld => !traffic.some(o => o.active && Math.abs(o.d - ld) < 2.4 && o.s - E.s > -16 && o.s - E.s < 34);
   CHASE.laneCd = Math.max(0, CHASE.laneCd - dt);
+  const opp = LANES.find(l => l.dir < 0 && l.d > -3);                                   // 対向の内側車線(詰まったら、空いていれば犯人は対向車線に出て追い越す)
   let me = ahead(E.dT);
-  if (me.gap < look * .75 && me.vl < v * .92 && CHASE.laneCd <= 0) {
-    let best = null, bg = me.gap + 12;
-    for (const l of same) { if (Math.abs(l.d - E.dT) < 1) continue; const r = ahead(l.d); if (r.gap > bg && sideClear(l.d)) { best = l; bg = r.gap; } }
-    if (best) { E.dT = best.d; CHASE.laneCd = 3; me = ahead(E.dT); }
+  if (E.dT > 0) {
+    if (me.gap < look * .75 && me.vl < v * .92 && CHASE.laneCd <= 0) {
+      let best = null, bg = me.gap + 12;
+      for (const l of same) { if (Math.abs(l.d - E.dT) < 1) continue; const r = ahead(l.d); if (r.gap > bg && sideClear(l.d)) { best = l; bg = r.gap; } }
+      if (!best && opp) { const r = ahead(opp.d); if (r.gap > 300 && sideClear(opp.d)) best = opp; }
+      if (best) { E.dT = best.d; CHASE.laneCd = 3; me = ahead(E.dT); }
+    }
+  } else {                                                                              // 対向車線を走っている間: 追い越し終わるか、対向車が近づいたら元の車線へ戻る
+    let back = null, bgp = 0;
+    for (const l of same) { const r = ahead(l.d); if (sideClear(l.d) && r.gap > 45 && r.gap > bgp) { back = l; bgp = r.gap; } }
+    if (back && (me.gap < 320 || (CHASE.laneCd <= 0 && bgp > 80))) { E.dT = back.d; CHASE.laneCd = 2.5; me = ahead(E.dT); }
   }
   let vT = vLim;
   if (me.gap < look) vT = Math.min(vT, Math.sqrt(me.vl * me.vl + 2 * 6.5 * Math.max(0, me.gap - 7)));
   const q = centerAt(E.s, _cs), kappa = q.k;
   gtrDrive(E, dt, kappa, 'chase', vT);
+  if (Math.abs(E.psi) > .8) { E.psi *= .6; E.r = 0; E.vy *= .3; }                       // 万一スピンしかけても、そのまま回り続けない(立て直す)
   const hed = q.h + E.psi, roll = clamp(-E.ay * .008, -.12, .12), pitch = clamp(-E.ax * .004, -.05, .05), m = CHASE.mesh;
   m.group.position.set(q.x + Math.cos(q.h) * E.d, q.y, q.z - Math.sin(q.h) * E.d); m.group.rotation.set(-Math.atan(q.sl || 0) + pitch, hed, roll);
   const braking = E.brk > .3; if (m.tailGlows) m.tailGlows.forEach(g => { g.material.opacity = braking ? 1 : .45; g.scale.setScalar(braking ? 2.2 : 1.3); });

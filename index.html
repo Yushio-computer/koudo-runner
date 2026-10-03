@@ -157,6 +157,7 @@
       <div style="opacity:.85">ProPILOT作動中に事故(巻き込みなど)が起きると、警告音とハザードを出しながら自動で緊急停車します</div>
     </div>
     <div class="go kbOnly">Enter かクリックでスタート</div>
+    <div style="margin-top:14px"><button id="touchToggle" style="font:inherit;font-size:13px;font-weight:700;color:#fff;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);border-radius:999px;padding:6px 16px;cursor:pointer;pointer-events:auto"></button></div>
     <div class="touchOnly" style="margin-top:12px"><button id="touchGo">スタート</button></div>
   </div>
 </div>
@@ -193,7 +194,8 @@ const rnd = (a, b) => a + Math.random() * (b - a);
    ===================================================================== */
 const HORIZON = 0xe9a173;             // 夕焼けの地平線色(霧の色と同じ)
 const canvas = $('gl');
-const TOUCH = matchMedia('(pointer:coarse)').matches || /[?&]touch=1/.test(location.search);   // スマホ・タブレット(?touch=1 でPCでも確認できる)
+const touchPref = (() => { try { return localStorage.getItem('touchMode'); } catch (_) { return null; } })();   // 'on' / 'off' / null(自動)
+const TOUCH = /[?&]touch=1/.test(location.search) || (touchPref === 'on' ? true : touchPref === 'off' ? false : matchMedia('(pointer:coarse)').matches);   // タッチ操作: URLの?touch=1 > 保存した設定 > 端末の自動判定
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(devicePixelRatio, TOUCH ? 1.5 : 2));   // スマホは描画を少し粗くして軽くする
 const scene = new THREE.Scene();
@@ -1184,6 +1186,7 @@ addEventListener('blur', () => { for (const k in keys) keys[k] = 0; });
 addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-course],[data-mode],[data-veh],#replayBtn')) return; if (state === 'ready') { if (!TOUCH) startGame(); } else if (state === 'over' && overT > 1.2) restart(); });
 $('replayBtn').addEventListener('pointerdown', e => { e.stopPropagation(); replayStart(); });
 /* ---- タッチ操作: 左下=ハンドル(指の位置で切れ角が変わる) / 右下=アクセル・ブレーキ / ボタンはキーボードのキーと同じ動き ---- */
+{ const tb = document.getElementById('touchToggle'); tb.textContent = 'タッチ操作: ' + (TOUCH ? 'ON' : 'OFF') + '(タップで切替)'; tb.addEventListener('pointerdown', e => e.stopPropagation()); tb.addEventListener('click', e => { e.stopPropagation(); try { localStorage.setItem('touchMode', TOUCH ? 'off' : 'on'); } catch (_) {} const u = new URL(location.href); u.searchParams.delete('touch'); location.href = u.toString(); }); }
 const touchIn = { steer: null };                     // 指でハンドルを持っている間だけ数値(左が+、-1〜1)。離すとnullでキーボード入力へ戻る
 if (TOUCH) {
   document.body.classList.add('touch');

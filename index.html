@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>公道ランナー</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <style>
   html,body{margin:0;height:100%;background:#000;overflow:hidden;color:#fff;
     font-family:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;user-select:none}
@@ -82,6 +82,37 @@
   #replayBtn:active{transform:scale(.9)}
   #replayHud{position:fixed;left:50%;top:14px;transform:translateX(-50%);font-size:15px;font-weight:700;background:rgba(0,0,0,.55);border-radius:8px;padding:5px 16px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:5}
   #replayHud.show{opacity:1}
+  /* ---- タッチ操作(スマホ) ---- */
+  html,body{touch-action:none;overscroll-behavior:none}
+  .touchOnly{display:none}
+  body.touch .touchOnly{display:block}
+  body.touch .kbOnly,body.touch .keys{display:none}
+  body.touch .ov{overflow-y:auto;align-items:flex-start;touch-action:pan-y;-webkit-overflow-scrolling:touch}
+  body.touch .ov>div{padding:10px 14px 24px;max-width:100%;box-sizing:border-box}
+  body.touch .ov h1{font-size:26px;margin:2px 0}
+  body.touch .ov p{font-size:12px;margin:3px 0}
+  body.touch .courses{gap:6px;margin:8px 0 2px}
+  body.touch .courses button{font-size:12px;padding:7px 9px}
+  body.touch .courses button kbd{display:none}
+  #touchGo{font:inherit;font-size:20px;font-weight:800;color:#000;background:#fff;border:0;border-radius:12px;padding:12px 44px;position:sticky;bottom:8px;box-shadow:0 2px 12px rgba(0,0,0,.5)}
+  body.touch #hud{zoom:.62}
+  body.touch #br{bottom:auto;top:46px}
+  body.touch #board{top:140px}
+  body.touch #mini{width:110px;height:110px;left:auto;right:calc(12px + env(safe-area-inset-right));top:130px;bottom:auto}
+  body.touch #replayBtn{right:auto;left:calc(16px + env(safe-area-inset-left));bottom:124px}
+  #tc{position:fixed;inset:0;pointer-events:none;display:none;z-index:20}
+  #tc.on{display:block}
+  #tc .tb{position:absolute;pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center;text-align:center;font-weight:800;font-size:15px;color:#fff;background:rgba(0,0,0,.38);border:2px solid rgba(255,255,255,.55);border-radius:14px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+  #tc .tb.act{background:rgba(255,255,255,.45)}
+  #tcSteer{left:calc(14px + env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));width:min(36vw,300px);height:96px;border-radius:48px;overflow:hidden}
+  #tcKnob{position:absolute;top:8px;left:calc(50% - 40px);width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.55);pointer-events:none}
+  #tcAcc{right:calc(14px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));width:104px;height:min(36vh,150px);background:rgba(60,200,120,.35)}
+  #tcBrk{right:calc(130px + env(safe-area-inset-right));bottom:calc(14px + env(safe-area-inset-bottom));width:84px;height:min(26vh,108px);background:rgba(230,70,70,.35)}
+  #tcBtns{position:absolute;right:calc(14px + env(safe-area-inset-right));bottom:calc(min(36vh,150px) + 26px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,56px);gap:6px;pointer-events:none}
+  #tcBtns .tb{position:static;height:40px;font-size:12px;border-radius:10px}
+  #tcEsc{right:calc(14px + env(safe-area-inset-right));top:14px;width:90px;height:40px;font-size:13px}
+  #rot{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.92);display:none;align-items:center;justify-content:center;font-size:20px;font-weight:700;text-align:center;line-height:1.8}
+  @media (orientation:portrait){ body.touch #rot{display:flex} }
 </style>
 </head>
 <body>
@@ -103,6 +134,7 @@
   <div id="pop"></div>
 </div>
 <div id="replayBtn" title="クラッシュ/急ブレーキのリプレイ">📷</div>
+<div id="rot">スマホは横向きにして遊んでください<br>(画面の向きのロックを解除)</div>
 <div id="replayHud">🎬 リプレイ再生中　<span style="opacity:.75">[Esc]で戻る</span></div>
 
 <div class="ov on" id="ovStart">
@@ -114,6 +146,7 @@
     <p id="modeDesc" style="font-size:13px;opacity:.8;margin-top:2px"></p>
     <div class="courses"><button data-course="public"><kbd>1</kbd>公道(無限ワインディング)</button><button data-course="tsukuba"><kbd>2</kbd>筑波サーキット(周回・ラップ計測)</button><button data-course="straight"><kbd>3</kbd>ベタ踏み直線(カーブなし)</button><button data-course="city"><kbd>4</kbd>都市マップ(信号・駐車・合流)</button><button data-course="smash"><kbd>5</kbd>破壊ステージ(障害物と地雷を壊しまくる)</button></div>
     <p id="courseDesc" style="font-size:13px;opacity:.8"></p>
+    <p class="touchOnly" style="font-size:12px;opacity:.85">遊び方: 左下をなぞってハンドル　右下でアクセル・ブレーキ　右上のボタンで視点・ニトロなど</p>
     <div class="keys">
       <div style="opacity:.85">スタート画面:　<kbd>A</kbd><kbd>D</kbd>コース選択　<kbd>W</kbd><kbd>S</kbd>車種選択　<kbd>Enter</kbd>/<kbd>Space</kbd>スタート</div>
       <div><kbd>W</kbd><kbd>↑</kbd>アクセル　<kbd>S</kbd><kbd>↓</kbd>ブレーキ/バック</div>
@@ -123,14 +156,16 @@
       <div style="opacity:.85">ProPILOT作動中、前の車に詰まって「追い越しますか?」と出たら<kbd>A</kbd>を軽くタップで追越車線へ(車線変更支援)。戻るときは<kbd>D</kbd>。長押しすると今まで通り手動運転</div>
       <div style="opacity:.85">ProPILOT作動中に事故(巻き込みなど)が起きると、警告音とハザードを出しながら自動で緊急停車します</div>
     </div>
-    <div class="go">Enter かクリックでスタート</div>
+    <div class="go kbOnly">Enter かクリックでスタート</div>
+    <div class="touchOnly" style="margin-top:12px"><button id="touchGo">スタート</button></div>
   </div>
 </div>
 <div class="ov" id="ovOver">
   <div>
     <h1 id="overTitle">クラッシュ!</h1>
     <p id="overText"></p>
-    <div class="go">Enter か R でリトライ　<span style="opacity:.8;font-weight:400">(1 / 2 でコース変更)</span></div>
+    <div class="go touchOnly">タップでリトライ</div>
+    <div class="go kbOnly">Enter か R でリトライ　<span style="opacity:.8;font-weight:400">(1 / 2 でコース変更)</span></div>
   </div>
 </div>
 
@@ -158,8 +193,9 @@ const rnd = (a, b) => a + Math.random() * (b - a);
    ===================================================================== */
 const HORIZON = 0xe9a173;             // 夕焼けの地平線色(霧の色と同じ)
 const canvas = $('gl');
+const TOUCH = matchMedia('(pointer:coarse)').matches || /[?&]touch=1/.test(location.search);   // スマホ・タブレット(?touch=1 でPCでも確認できる)
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, TOUCH ? 1.5 : 2));   // スマホは描画を少し粗くして軽くする
 const scene = new THREE.Scene();
 scene.fog = new THREE.Fog(HORIZON, 90, 1000);
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 4000);
@@ -1145,8 +1181,48 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = 0; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = 0; });
-addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-course],[data-mode],[data-veh],#replayBtn')) return; if (state === 'ready') startGame(); else if (state === 'over' && overT > 1.2) restart(); });
+addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('[data-course],[data-mode],[data-veh],#replayBtn')) return; if (state === 'ready') { if (!TOUCH) startGame(); } else if (state === 'over' && overT > 1.2) restart(); });
 $('replayBtn').addEventListener('pointerdown', e => { e.stopPropagation(); replayStart(); });
+/* ---- タッチ操作: 左下=ハンドル(指の位置で切れ角が変わる) / 右下=アクセル・ブレーキ / ボタンはキーボードのキーと同じ動き ---- */
+const touchIn = { steer: null };                     // 指でハンドルを持っている間だけ数値(左が+、-1〜1)。離すとnullでキーボード入力へ戻る
+if (TOUCH) {
+  document.body.classList.add('touch');
+  addEventListener('contextmenu', e => e.preventDefault());
+  const root = document.createElement('div'); root.id = 'tc';
+  root.innerHTML = '<div class="tb" id="tcSteer"><div id="tcKnob"></div><span style="opacity:.8;font-size:13px;pointer-events:none">ハンドル</span></div><div class="tb" id="tcBrk">ブレーキ</div><div class="tb" id="tcAcc">アクセル</div><div id="tcBtns"></div><div class="tb" id="tcEsc" style="display:none">リプレイ終了</div>';
+  document.body.appendChild(root);
+  const fire = (code, type) => dispatchEvent(new KeyboardEvent(type, { code }));
+  const hold = (el, down, up) => {
+    el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); try { el.setPointerCapture(e.pointerId); } catch (_) {} el.classList.add('act'); down(); });
+    const end = () => { if (el.classList.contains('act')) { el.classList.remove('act'); up(); } };
+    el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end); el.addEventListener('lostpointercapture', end);
+  };
+  hold($('tcAcc'), () => { keys.up = 1; }, () => { keys.up = 0; });
+  hold($('tcBrk'), () => { keys.down = 1; }, () => { keys.down = 0; });
+  const pad = $('tcSteer'), knob = $('tcKnob');
+  const setSteer = e => {
+    const r = pad.getBoundingClientRect(), half = r.width / 2 - 24, nx = clamp((e.clientX - (r.left + r.width / 2)) / half, -1, 1);
+    const m = Math.max(0, Math.abs(nx) - .06) / .94;
+    touchIn.steer = -Math.sign(nx) * Math.pow(m, 1.25);
+    keys.left = nx < -.3 ? 1 : 0; keys.right = nx > .3 ? 1 : 0;                        // ProPILOTの車線変更タップなど、キー入力を見ている処理のため
+    knob.style.left = `calc(50% - 40px + ${nx * half}px)`;
+  };
+  const endSteer = () => { touchIn.steer = null; keys.left = keys.right = 0; knob.style.left = 'calc(50% - 40px)'; };
+  pad.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); try { pad.setPointerCapture(e.pointerId); } catch (_) {} pad.classList.add('act'); setSteer(e); });
+  pad.addEventListener('pointermove', e => { if (pad.classList.contains('act')) setSteer(e); });
+  const endPad = () => { if (pad.classList.contains('act')) { pad.classList.remove('act'); endSteer(); } };
+  pad.addEventListener('pointerup', endPad); pad.addEventListener('pointercancel', endPad); pad.addEventListener('lostpointercapture', endPad);
+  const btns = [['視点', () => 'KeyC'], ['ニトロ', () => 'ShiftLeft', 1], ['ProPILOT', () => 'KeyP'], ['ドリフト', () => 'Space', 1], ['復帰', () => 'KeyR'], ['モード', () => 'KeyQ'], ['回生', () => hasEPedal() ? 'KeyE' : 'KeyB'], ['天候', () => 'KeyF']];
+  for (const [label, code, isHold] of btns) {
+    const b = document.createElement('div'); b.className = 'tb'; b.textContent = label; $('tcBtns').appendChild(b); b.style.pointerEvents = 'auto';
+    let cur = null;
+    hold(b, () => { cur = code(); fire(cur, 'keydown'); if (!isHold) { fire(cur, 'keyup'); cur = null; } }, () => { if (cur) fire(cur, 'keyup'); cur = null; });
+  }
+  hold($('tcEsc'), () => fire('Escape', 'keydown'), () => fire('Escape', 'keyup'));
+  $('touchGo').addEventListener('click', e => { e.stopPropagation(); if (state === 'ready') startGame(); });
+  setInterval(() => { root.classList.toggle('on', state === 'play' || replay.active); $('tcEsc').style.display = replay.active ? 'flex' : 'none'; $('tcBtns').style.display = replay.active ? 'none' : ''; $('tcSteer').style.display = $('tcAcc').style.display = $('tcBrk').style.display = replay.active ? 'none' : ''; }, 120);
+}
+
 
 /* =====================================================================
    サウンド(WebAudioでその場合成)
@@ -2494,7 +2570,7 @@ function stepPlayer(dt) {
   const av = Math.abs(vf);
   // --- ハンドル → ヨー(旋回)。速度が上がるほど切れ角は小さく
   const pilSteer = pil && PP.steerOvr <= 0;
-  const st = alive && !air ? (pilSteer ? PP.steer : (keys.left ? 1 : 0) - (keys.right ? 1 : 0)) : 0;
+  const st = alive && !air ? (pilSteer ? PP.steer : touchIn.steer !== null ? touchIn.steer : (keys.left ? 1 : 0) - (keys.right ? 1 : 0)) : 0;
   const rate = (st === 0 && !pilSteer ? 6 : 3.6) * M.steerRate * H.steerRate / (1 + av / H.steerDecay);       // 速いほどキー入力に対するハンドルの動きをゆっくりに
   c.steer += clamp(st - c.steer, -rate * dt, rate * dt);
   // 舵角 → 自転車モデルの旋回(ヨーレート)。限界に近づくほど舵が効かなくなる(アンダーステア)
